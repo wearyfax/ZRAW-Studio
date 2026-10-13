@@ -13,6 +13,7 @@ using System.Runtime.InteropServices;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using ReaLTaiizor.Controls;
@@ -757,9 +758,47 @@ public class ConvertPage : UserControl
                 Overall(0);
                 break;
             default:
-                if (line.Trim().Length > 0) Write(line.Trim());
+                if (line.Trim().Length > 0) Write(EngineText(line.Trim()));
                 break;
         }
+    }
+
+    // The engine's routine lines (which GPU compresses, denoise, fixed-quality measurements), translated;
+    // errors and anything else show as the engine wrote them. Parts are translated on their own (the
+    // mode in "<mode>, DCT and rate control on <GPU>"), and numbers are read back so they get the UI's
+    // decimal comma.
+    static readonly string[,] EngineLines =
+    {
+        { @"^(lossy.+), DCT and rate control on (.+)$", L.T("{0}, DCT and rate control on {1}") },
+        { @"^(lossy.+) on the CPU$", L.T("{0} on the CPU") },
+        { @"^(lossy.+) on the CPU, GPU unavailable: (.+)$", L.T("{0} on the CPU, GPU unavailable: {1}") },
+        { @"^lossy ([\d.]+):1$", L.T("lossy {0:0.00}:1") },
+        { @"^lossy, fixed quality ([\d.]+) x noise \(([\d.]+) to ([\d.]+):1\)$", L.T("lossy, fixed quality {0:0.00} x noise ({1:0.0} to {2:0.0}:1)") },
+        { @"^denoise on (.+)$", L.T("denoise on {0}") },
+        { @"^denoise needs a GPU \((.+)\): converting without it$", L.T("denoise needs a GPU ({0}): converting without it") },
+        { @"^denoise unavailable \((.+)\): converting this clip without it$", L.T("denoise unavailable ({0}): converting this clip without it") },
+        { @"^not enough GPU memory$", L.T("not enough GPU memory") },
+        { @"^denoise: (\d+) frames per merge \(temporal ([\d.]+), spatial ([\d.]+)\), ISO (\d+) noise model$", L.T("denoise: {0} {0:frame|frames} per merge (temporal {1:0.0}, spatial {2:0.00}), ISO {3} noise model") },
+        { @"^fixed quality ([\d.]+) x noise, ISO (\S+): scale ([\d.]+) from (\d+) frames$", L.T("fixed quality {0:0.00} x noise, ISO {1}: scale {2:0.00} from {3} {3:frame|frames}") },
+        { @"^fixed quality ([\d.]+) x noise, ISO (\S+): scale ([\d.]+) from (\d+) denoised frames$", L.T("fixed quality {0:0.00} x noise, ISO {1}: scale {2:0.00} from {3} denoised {3:frame|frames}") },
+        { @"^fixed quality: no frame could be measured, using ([\d.]+):1 instead$", L.T("fixed quality: no frame could be measured, using {0:0.0}:1 instead") },
+    };
+
+    static string EngineText(string line)
+    {
+        if (!L.Ru) return line;
+        for (int i = 0; i < EngineLines.GetLength(0); i++)
+        {
+            var m = Regex.Match(line, EngineLines[i, 0]);
+            if (!m.Success) continue;
+            var args = m.Groups.Cast<Group>().Skip(1).Select(g =>
+            {
+                double d;
+                return double.TryParse(g.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out d) ? (object)d : EngineText(g.Value);
+            }).ToArray();
+            return L.F(EngineLines[i, 1], args);
+        }
+        return line;
     }
 
     // Writes a clip's folder icon once both are in: the rendered icon and a successful conversion
@@ -788,7 +827,7 @@ public class ConvertPage : UserControl
         if (rate > 0)
         {
             var left = TimeSpan.FromSeconds((totalFrames - done) / rate);
-            eta.Text = L.F("Queue: {0} left, done about {1}", Hms(left.TotalSeconds), (now + left).ToShortTimeString());
+            eta.Text = L.F("Queue: {0} left, done about {1}", Hms(left.TotalSeconds), (now + left).ToString("t", L.Ru ? L.Culture : CultureInfo.CurrentCulture));   // "0:48" in Russian, Windows' own clock format otherwise
         }
     }
 

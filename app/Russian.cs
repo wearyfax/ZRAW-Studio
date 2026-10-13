@@ -197,6 +197,21 @@ static partial class L
         { "A conversion is running. Stop it and quit?", "Идёт конвертация. Остановить её и выйти?" },
         { "Windows refused the folder icon (0x{0})", "Windows не приняла значок папки (0x{0})" },
 
+        // The engine's routine log lines (ConvertPage.EngineLines)
+        { "{0}, DCT and rate control on {1}", "{0}, вычисления на {1}" },
+        { "{0} on the CPU", "{0}, вычисления на процессоре" },
+        { "{0} on the CPU, GPU unavailable: {1}", "{0}, вычисления на процессоре (видеокарта недоступна: {1})" },
+        { "lossy {0:0.00}:1", "Сжатие с потерями {0:0.00}:1" },
+        { "lossy, fixed quality {0:0.00} x noise ({1:0.0} to {2:0.0}:1)", "Сжатие с потерями, фиксированное качество: погрешность {0:0.00} от шума (от {1:0.0} до {2:0.0}:1)" },
+        { "denoise on {0}", "Шумоподавление на {0}" },
+        { "denoise needs a GPU ({0}): converting without it", "Для шумоподавления нужна видеокарта ({0}), конвертация пойдёт без него" },
+        { "denoise unavailable ({0}): converting this clip without it", "Шумоподавление недоступно ({0}), этот клип конвертируется без него" },
+        { "not enough GPU memory", "не хватает памяти видеокарты" },
+        { "denoise: {0} {0:frame|frames} per merge (temporal {1:0.0}, spatial {2:0.00}), ISO {3} noise model", "Шумоподавление: {0} {0:кадр|кадра|кадров} на слияние (временное {1:0.0}, пространственное {2:0.00}), модель шума для ISO {3}" },
+        { "fixed quality {0:0.00} x noise, ISO {1}: scale {2:0.00} from {3} {3:frame|frames}", "Фиксированное качество, погрешность {0:0.00} от шума, ISO {1}: масштаб {2:0.00} по {3} {3:кадру|кадрам|кадрам}" },
+        { "fixed quality {0:0.00} x noise, ISO {1}: scale {2:0.00} from {3} denoised {3:frame|frames}", "Фиксированное качество, погрешность {0:0.00} от шума, ISO {1}: масштаб {2:0.00} по {3} {3:очищенному кадру|очищенным кадрам|очищенным кадрам}" },
+        { "fixed quality: no frame could be measured, using {0:0.0}:1 instead", "Фиксированное качество: ни один кадр не удалось измерить, вместо этого сжатие {0:0.0}:1" },
+
         // Explorer add-on (thumbnail engine) installer
         { "ERROR: another handler ({0}) is already registered at HKCU\\{1}. ZRAW Studio does not replace it, so the thumbnail engine was not installed.", "ОШИБКА: другой обработчик ({0}) уже зарегистрирован в HKCU\\{1}. ZRAW Studio его не заменяет, поэтому миниатюры не включены." },
         { "Installed: Explorer shows ZRAW clips with their own icon, thumbnail and Preview pane image ({0})", "Включено: Проводник показывает клипы ZRAW со своим значком, миниатюрой и картинкой в области просмотра ({0})" },
