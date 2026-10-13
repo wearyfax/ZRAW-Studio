@@ -34,17 +34,17 @@ public class PreviewForm : MetroForm
             if (info.Hevc)
             {
                 // HEVC ZRAW plays in mpv through the ZRAW plugin (descrambled on the fly); there is no Studio preview for it
-                if (!info.Convertible) { log(Path.GetFileName(path) + " is an HEVC ZRAW variant this version does not recognize."); return; }
+                if (!info.Convertible) { log(L.F("{0} is an HEVC ZRAW variant this version does not recognize.", Path.GetFileName(path))); return; }
                 if (Mpv.Find() != null && Mpv.PluginState() != null && Mpv.Play(new[] { path }, log)) return;
-                log(Path.GetFileName(path) + " is HEVC ZRAW: install mpv and the ZRAW plugin (Player tab) to play it.");
+                log(L.F("{0} is HEVC ZRAW: install mpv and the ZRAW plugin (Player tab) to play it.", Path.GetFileName(path)));
                 return;
             }
             if (mpv && (!info.TrueRaw || Mpv.PluginState() != null) && Mpv.Play(new[] { path }, log)) return;
-            if (mpv && info.TrueRaw) log("The ZRAW plugin for mpv is not installed (Player tab), so this RAW clip opens in ZRAW Studio's preview.");
+            if (mpv && info.TrueRaw) log(L.T("The ZRAW plugin for mpv is not installed (Player tab), so this RAW clip opens in ZRAW Studio's preview."));
             if (info.TrueRaw) new PreviewForm(path, info.Frames, info.Fps).Show(owner);
             else System.Diagnostics.Process.Start(path);
         }
-        catch (Exception ex) { log("Cannot open " + path + ": " + ex.Message); }
+        catch (Exception ex) { log(L.F("Could not open {0}: {1}", path, ex.Message)); }
     }
 
     public PreviewForm(string path, int frames, double fps)
@@ -106,7 +106,7 @@ public class PreviewForm : MetroForm
     void Request(int f)
     {
         var t = TimeSpan.FromSeconds(f / fps);
-        pos.Text = string.Format(CultureInfo.InvariantCulture, "Frame {0} of {1}     {2}:{3:00}.{4:00}", f + 1, frames, (int)t.TotalMinutes, t.Seconds, f % (int)Math.Round(fps));
+        pos.Text = L.F("Frame {0} of {1}     {2}:{3:00}.{4:00}", f + 1, frames, (int)t.TotalMinutes, t.Seconds, f % (int)Math.Round(fps));
         lock (gate)
         {
             want = f;
@@ -134,7 +134,7 @@ public class PreviewForm : MetroForm
             {
                 BeginInvoke(new Action(() =>
                 {
-                    if (err != null) { pos.Text = "Cannot show this frame: " + err; return; }
+                    if (err != null) { pos.Text = L.F("Cannot show this frame: {0}", err); return; }
                     var old = pic.Image;
                     pic.Image = b;
                     if (old != null) old.Dispose();

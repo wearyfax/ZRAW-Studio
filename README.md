@@ -57,6 +57,8 @@ Playing ZRAW clips needs [mpv](https://mpv.io/installation/). ZRAW Studio's plug
 
 The **About** tab shows your version, checks for updates and opens the log folder. If something goes wrong, attach the newest log file to an [issue](https://github.com/wearyfax/ZRAW-Studio/issues).
 
+В ZRAW Studio встроен русский перевод: на русской Windows он включается сам, а сменить язык можно на вкладке «О программе».
+
 ---
 
 ## More about the features

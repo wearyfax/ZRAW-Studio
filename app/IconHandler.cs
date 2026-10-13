@@ -50,7 +50,7 @@ static class IconHandler
     public static void Install(Action<string> log)
     {
         for (int i = 0; i < Handlers.GetLength(0); i++)
-            if (!string.IsNullOrEmpty(Slot(i)) && !Ours(i)) { log("ERROR: another handler (" + Slot(i) + ") is already registered at HKCU\\" + Handlers[i, 1] + ". ZRAW Studio does not replace it, so the thumbnail engine was not installed."); return; }
+            if (!string.IsNullOrEmpty(Slot(i)) && !Ours(i)) { log(L.F("ERROR: another handler ({0}) is already registered at HKCU\\{1}. ZRAW Studio does not replace it, so the thumbnail engine was not installed.", Slot(i), Handlers[i, 1])); return; }
         byte[] dll;
         using (var rs = typeof(IconHandler).Assembly.GetManifestResourceStream("ZrawIcon.dll"))
         using (var ms = new MemoryStream()) { rs.CopyTo(ms); dll = ms.ToArray(); }
@@ -74,8 +74,8 @@ static class IconHandler
         RemoveOldThumbSlot();
         Cleanup(path, log);
         Refresh();
-        log("Installed: Explorer shows ZRAW clips with their own icon, thumbnail and Preview pane image (" + path + ")");
-        log("If a window still shows old icons, press F5 in it or restart Explorer.");
+        log(L.F("Installed: Explorer shows ZRAW clips with their own icon, thumbnail and Preview pane image ({0})", path));
+        log(L.T("If a window still shows old icons, press F5 in it or restart Explorer."));
     }
 
     public static void Uninstall(Action<string> log)
@@ -89,7 +89,7 @@ static class IconHandler
         RemoveOldThumbSlot();
         Refresh();
         Cleanup(null, log);
-        log("Removed: .MOV files show their normal icon, thumbnail and preview again.");
+        log(L.T("Removed: .MOV files show their normal icon, thumbnail and preview again."));
     }
 
     static void Cleanup(string keep, Action<string> log)
@@ -99,7 +99,7 @@ static class IconHandler
         {
             if (f.Equals(keep, StringComparison.OrdinalIgnoreCase)) continue;
             try { File.Delete(f); }
-            catch { log("Explorer is still using the old " + Path.GetFileName(f) + ". ZRAW Studio deletes it the next time you install or remove the thumbnail engine."); }
+            catch { log(L.F("Explorer is still using the old {0}. ZRAW Studio deletes it the next time you install or remove the thumbnail engine.", Path.GetFileName(f))); }
         }
     }
 }

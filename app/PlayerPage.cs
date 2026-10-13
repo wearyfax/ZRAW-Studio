@@ -70,20 +70,20 @@ static class Mpv
     {
         var list = files.ToList();
         string exe = Find();
-        if (exe == null) { log("mpv is not installed. Click Get mpv on the Player tab."); return false; }
+        if (exe == null) { log(L.T("mpv is not installed. Click Get mpv on the Player tab.")); return false; }
         foreach (var f in list)
         {
             MovInfo info;
             try { info = MovInfo.Read(f); } catch { continue; }
-            if ((info.TrueRaw || info.Hevc) && PluginState() == null) log(Path.GetFileName(f) + " is ZRAW: install the ZRAW plugin on the Player tab so mpv can play it.");
+            if ((info.TrueRaw || info.Hevc) && PluginState() == null) log(L.F("{0} is ZRAW: install the ZRAW plugin on the Player tab so mpv can play it.", Path.GetFileName(f)));
         }
         try
         {
             Process.Start(new ProcessStartInfo(exe, string.Join(" ", list.Select(f => "\"" + f + "\""))) { UseShellExecute = false });
-            log("Playing " + (list.Count == 1 ? Path.GetFileName(list[0]) : list.Count + " files") + " in mpv.");
+            log(list.Count == 1 ? L.F("Playing {0} in mpv.", Path.GetFileName(list[0])) : L.F("Playing {0} {0:file|files} in mpv.", list.Count));
             return true;
         }
-        catch (Exception ex) { log("Could not start mpv: " + ex.Message); return false; }
+        catch (Exception ex) { log(L.F("Could not start mpv: {0}", ex.Message)); return false; }
     }
 }
 
@@ -92,11 +92,11 @@ public class PlayerPage : UserControl
     const int OW = 296, LW = 92;
 
     readonly RichTextBox log = Z.Log();
-    readonly MetroButton pick = Z.Button("Play files...", false), getMpv = Z.Button("Get mpv", false), locate = Z.Button("Locate mpv.exe...", false);
-    readonly MetroButton install = Z.Button("Install plugin", true), uninstall = Z.Button("Remove", false);
-    readonly MetroComboBox player = Z.Combo("ZRAW Studio preview", "mpv");
+    readonly MetroButton pick = Z.Button(L.T("Play files..."), false), getMpv = Z.Button(L.T("Get mpv"), false), locate = Z.Button(L.T("Locate mpv.exe..."), false);
+    readonly MetroButton install = Z.Button(L.T("Install plugin"), true), uninstall = Z.Button(L.T("Remove plugin"), false);
+    readonly MetroComboBox player = Z.Combo(L.T("ZRAW Studio preview"), "mpv");
     readonly MetroComboBox lookColor = Z.Combo(Look.Names);
-    readonly MetroComboBox lookExposure = Z.Combo(Look.Exposures.Select(e => e == 0 ? "0 (as shot)" : e.ToString("+0.0;-0.0", System.Globalization.CultureInfo.InvariantCulture) + " stops").ToArray());
+    readonly MetroComboBox lookExposure = Z.Combo(Look.Exposures.Select(e => e == 0 ? L.T("0 (as shot)") : L.F("{0:+0.0;-0.0} stops", e)).ToArray());
     readonly Label mpvState = Z.Text1("", Z.Text, OW - LW, 22), mpvPath = Z.Text1("", Z.Dim, OW, 20);
     readonly Label pluginState = Z.Text1("", Z.Text, OW - LW, 22), pluginPath = Z.Text1("", Z.Dim, OW, 20);
     readonly ToolTip toolTip = new ToolTip { AutoPopDelay = 32767 };   // the longest Windows allows (about 33 s); the default 5 s is too short to read long tooltips
@@ -124,15 +124,15 @@ public class PlayerPage : UserControl
         flow.HandleCreated += (s, e) => Z.DarkScrollbars(flow);
         player.Width = lookColor.Width = lookExposure.Width = OW - LW;
         flow.Controls.AddRange(new Control[] {
-            Head("PLAYBACK", true), Field("Double-click", player),
-            Note("Used when you double-click a clip."), Note("Other videos: mpv, or else your usual player."),
-            Head("PREVIEW LOOK", false), Field("Color", lookColor), Field("Exposure", lookExposure),
-            Note("For RAW clips in ZRAW Studio's preview,"), Note("thumbnails and mpv (from the next clip)."),
-            Head("MPV", false), Field("Status", mpvState), mpvPath, Z.Bar(DockStyle.None, getMpv, locate),
-            Head("ZRAW PLUGIN FOR MPV", false), Field("Status", pluginState), pluginPath, Z.Bar(DockStyle.None, install, uninstall),
-            Note("Lets mpv play ZRAW clips: RAW at 4K, and HEVC."), Note("Ctrl+Up/Down: exposure"), Note("Ctrl+Left/Right: warmth"),
-            Note("Ctrl+0: default exposure    Ctrl+H: 4K or half"), Note("4K needs vo=gpu-next in mpv.conf."),
-            Note("HEVC ZRAW: Ctrl+H switches GPU / CPU decoding.") });
+            Head(L.T("PLAYBACK"), true), Field(L.T("Double-click"), player),
+            Note(L.T("Used when you double-click a clip.")), Note(L.T("Other videos: mpv, or else your usual player.")),
+            Head(L.T("PREVIEW LOOK"), false), Field(L.T("Color"), lookColor), Field(L.T("Exposure"), lookExposure),
+            Note(L.T("For RAW clips in ZRAW Studio's preview,")), Note(L.T("thumbnails and mpv (from the next clip).")),
+            Head("MPV", false), Field(L.T("Status"), mpvState), mpvPath, Z.Bar(DockStyle.None, getMpv, locate),
+            Head(L.T("ZRAW PLUGIN FOR MPV"), false), Field(L.T("Status"), pluginState), pluginPath, Z.Bar(DockStyle.None, install, uninstall),
+            Note(L.T("Lets mpv play ZRAW clips: RAW at 4K, and HEVC.")), Note(L.T("Ctrl+Up/Down: exposure")), Note(L.T("Ctrl+Left/Right: warmth")),
+            Note(L.T("Ctrl+0: default exposure    Ctrl+H: 4K or half")), Note(L.T("4K needs vo=gpu-next in mpv.conf.")),
+            Note(L.T("HEVC ZRAW: Ctrl+H switches GPU/CPU decoding.")) });
         opts.Controls.Add(flow);
 
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 180, BackColor = Z.Panel, Padding = new Padding(0, 10, 0, 0) };
@@ -157,20 +157,20 @@ public class PlayerPage : UserControl
             ThumbView.LookChanged();
             if (Mpv.PluginState() == null) return;
             try { Look.WriteMpvConf(); }
-            catch (Exception ex) { Write("ERROR: could not write " + Look.ConfPath + " (" + ex.Message + ")."); }
+            catch (Exception ex) { Write(L.F("ERROR: could not write {0} ({1}).", Look.ConfPath, ex.Message)); }
         };
         lookColor.SelectedIndexChanged += lookChanged;
         lookExposure.SelectedIndexChanged += lookChanged;
         pick.Click += (s, e) =>
         {
-            using (var d = new OpenFileDialog { Multiselect = true, Title = "Play in mpv", Filter = "Video files|*.mov;*.mp4;*.mkv;*.mxf;*.avi;*.zraw|All files|*.*" })
+            using (var d = new OpenFileDialog { Multiselect = true, Title = L.T("Play in mpv"), Filter = L.T("Video files|*.mov;*.mp4;*.mkv;*.mxf;*.avi;*.zraw|All files|*.*") })
                 if (d.ShowDialog(this) == DialogResult.OK) Play(d.FileNames);
         };
         drop.Click += (s, e) => pick.PerformClick();
-        getMpv.Click += (s, e) => { try { Process.Start(Mpv.Download); } catch (Exception ex) { Write("Cannot open " + Mpv.Download + ": " + ex.Message); } };
+        getMpv.Click += (s, e) => { try { Process.Start(Mpv.Download); } catch (Exception ex) { Write(L.F("Could not open {0}: {1}", Mpv.Download, ex.Message)); } };
         locate.Click += (s, e) =>
         {
-            using (var d = new OpenFileDialog { Title = "Where is mpv.exe?", Filter = "mpv|mpv.exe|Programs|*.exe" })
+            using (var d = new OpenFileDialog { Title = L.T("Where is mpv.exe?"), Filter = L.T("mpv|mpv.exe|Programs|*.exe") })
                 if (d.ShowDialog(this) == DialogResult.OK) { Settings.Set("mpvPath", d.FileName); Settings.Save(); UpdateStatus(); }
         };
         install.Click += (s, e) =>
@@ -180,21 +180,21 @@ public class PlayerPage : UserControl
                 Directory.CreateDirectory(Mpv.ScriptsDir());
                 File.WriteAllBytes(Mpv.PluginPath, Embedded.Bytes("zraw.dll.gz"));
                 Look.WriteMpvConf();
-                Write("Installed the ZRAW plugin: " + Mpv.PluginPath);
+                Write(L.F("Installed the ZRAW plugin: {0}", Mpv.PluginPath));
             }
-            catch (IOException ex) { Write("ERROR: could not write the plugin (" + ex.Message + "). If mpv is open, close it and try again."); }
-            catch (Exception ex) { Write("ERROR: " + ex.Message); }
+            catch (IOException ex) { Write(L.F("ERROR: could not write the plugin ({0}). If mpv is open, close it and try again.", ex.Message)); }
+            catch (Exception ex) { Write(L.F("ERROR: {0}", ex.Message)); }
             UpdateStatus();
         };
         uninstall.Click += (s, e) =>
         {
-            try { File.Delete(Mpv.PluginPath); Write("Removed the ZRAW plugin."); }
-            catch (Exception ex) { Write("ERROR: could not remove the plugin (" + ex.Message + "). If mpv is open, close it and try again."); }
+            try { File.Delete(Mpv.PluginPath); Write(L.T("Removed the ZRAW plugin.")); }
+            catch (Exception ex) { Write(L.F("ERROR: could not remove the plugin ({0}). If mpv is open, close it and try again.", ex.Message)); }
             UpdateStatus();
         };
         VisibleChanged += (s, e) => { if (Visible) UpdateStatus(); };   // mpv may have been installed meanwhile
         UpdateStatus();
-        log.HandleCreated += (s, e) => Write("Drop videos anywhere in this window to play them in mpv.");
+        log.HandleCreated += (s, e) => Write(L.T("Drop videos anywhere in this window to play them in mpv."));
     }
 
     static MetroLabel Head(string text, bool first) { var l = Z.Label(text, Z.Dim, Z.HeadFont); l.Margin = new Padding(0, first ? 0 : 16, 0, 6); return l; }
@@ -215,18 +215,18 @@ public class PlayerPage : UserControl
     void UpdateStatus()
     {
         string exe = Mpv.Find();
-        mpvState.Text = exe != null ? "Found" : "Not installed";
+        mpvState.Text = L.T(exe != null ? "Found" : "Not installed");
         mpvState.ForeColor = exe != null ? Z.Good : Z.RedHover;
-        mpvPath.Text = exe != null ? Z.ShortPath(exe, mpvPath) : "Get it from mpv.io, then come back here.";
+        mpvPath.Text = exe != null ? Z.ShortPath(exe, mpvPath) : L.T("Get it from mpv.io, then come back here.");
         toolTip.SetToolTip(mpvPath, exe ?? Mpv.Download);
         getMpv.Visible = exe == null;
 
         var state = Mpv.PluginState();
-        pluginState.Text = state == null ? "Not installed" : state.Value ? "Installed" : "Installed, a different version";
+        pluginState.Text = L.T(state == null ? "Not installed" : state.Value ? "Installed" : "Installed, a different version");
         pluginState.ForeColor = state == true ? Z.Good : state == null ? Z.Dim : Z.Text;
         pluginPath.Text = Z.ShortPath(Mpv.PluginPath, pluginPath);
         toolTip.SetToolTip(pluginPath, Mpv.PluginPath);
-        install.Text = state == false ? "Update plugin" : "Install plugin";
+        install.Text = L.T(state == false ? "Update plugin" : "Install plugin");
         install.Enabled = state != true;
         uninstall.Enabled = state != null;
     }
@@ -234,7 +234,7 @@ public class PlayerPage : UserControl
     public void Play(IEnumerable<string> paths)
     {
         var files = paths.Where(File.Exists).ToList();
-        if (files.Count == 0) { Write("Drop video files, not folders."); return; }
+        if (files.Count == 0) { Write(L.T("Drop video files, not folders.")); return; }
         Mpv.Play(files, Write);
     }
 
@@ -260,8 +260,8 @@ public class PlayerPage : UserControl
             using (var pen = new Pen(over ? Z.Red : Z.Line, 2) { DashStyle = DashStyle.Dash })
                 g.DrawRectangle(pen, 1, 1, Width - 3, Height - 3);
             var mid = Height / 2;
-            TextRenderer.DrawText(g, "Drop video files here", Z.BigFont, new Rectangle(0, mid - 44, Width, 44), over ? Color.White : Z.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.Bottom);
-            TextRenderer.DrawText(g, "They play in mpv. Or click to choose files.", Z.UiFont, new Rectangle(0, mid + 6, Width, 24), Z.Dim, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top);
+            TextRenderer.DrawText(g, L.T("Drop video files here"), Z.BigFont, new Rectangle(0, mid - 44, Width, 44), over ? Color.White : Z.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.Bottom);
+            TextRenderer.DrawText(g, L.T("They play in mpv. Or click to choose files."), Z.UiFont, new Rectangle(0, mid + 6, Width, 24), Z.Dim, TextFormatFlags.HorizontalCenter | TextFormatFlags.Top);
         }
     }
 }

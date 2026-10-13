@@ -1,5 +1,5 @@
-// About tab: version and update check, the log folder for problem reports, the donation address,
-// and credits for the projects ZRAW Studio is built on.
+// About tab: version, language and update check, the log folder for problem reports, the donation
+// address, and credits for the projects ZRAW Studio is built on.
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -29,19 +29,21 @@ static class Updates
                 w.Headers[HttpRequestHeader.UserAgent] = "ZRAW-Studio/" + Version;
                 w.Headers[HttpRequestHeader.Accept] = "application/vnd.github+json";
                 var m = Regex.Match(w.DownloadString("https://api.github.com/repos/wearyfax/ZRAW-Studio/releases/latest"), "\"tag_name\"\\s*:\\s*\"v?([0-9]+(\\.[0-9]+){1,3})\"");
-                if (!m.Success) throw new InvalidDataException("GitHub's reply has no version number");
+                if (!m.Success) throw new InvalidDataException(L.T("GitHub's reply has no version number"));
                 return new Version(m.Groups[1].Value);
             }
         }
         catch (WebException ex)
         {
             var r = ex.Response as HttpWebResponse;
-            if (r != null && r.StatusCode == HttpStatusCode.NotFound) throw new InvalidDataException("no release is published yet");
+            if (r != null && r.StatusCode == HttpStatusCode.NotFound) throw new InvalidDataException(L.T("no release is published yet"));
             throw;
         }
     }
 
-    public static bool IsNewer(Version v) { return v > new Version(Version); }
+    // Missing parts count as 0: Version alone ranks 1.0.0.0 above 1.0.0, so the tag v1.0.0.0 looked newer
+    static Version Full(Version v) { return new Version(v.Major, v.Minor, Math.Max(0, v.Build), Math.Max(0, v.Revision)); }
+    public static bool IsNewer(Version v) { return Full(v) > Full(new Version(Version)); }
 }
 
 public class AboutPage : UserControl
@@ -50,10 +52,11 @@ public class AboutPage : UserControl
     const string Monero = "839eRTjQkKyLsephY5jtxdU1NzRk1sGtw7vts9mbyBmvY8sPvA6LugijW7fj4YirRQXA7212LG2E74qNKYrhgs5CAV1ZMt3";
 
     readonly Label updateState = Z.Text1("", Z.Dim, LeftW, 22), problemState = Z.Text1("", Z.Dim, LeftW, 22), walletState = Z.Text1("", Z.Dim, LeftW, 22);
-    readonly MetroButton check = Z.Button("Check for updates", false), download = Z.Button("Download", true);
-    readonly ZCheck autoCheck = Z.Check("Check for updates when ZRAW Studio starts");
-    readonly MetroButton logs = Z.Button("Open log folder", false), report = Z.Button("Report a problem", false);
-    readonly MetroButton copy = Z.Button("Copy address", false), wallet = Z.Button("Open in wallet", false);
+    readonly MetroButton check = Z.Button(L.T("Check for updates"), false), download = Z.Button(L.T("Download"), true);
+    readonly ZCheck autoCheck = Z.Check(L.T("Check for updates when ZRAW Studio starts"));
+    readonly MetroButton logs = Z.Button(L.T("Open log folder"), false), report = Z.Button(L.T("Report a problem"), false);
+    readonly MetroButton copy = Z.Button(L.T("Copy address"), false), wallet = Z.Button(L.T("Open in wallet"), false);
+    readonly MetroButton english = Z.Button("English", false), russian = Z.Button("Русский", false);   // each in its own language
     int checking;
 
     public AboutPage()
@@ -72,15 +75,20 @@ public class AboutPage : UserControl
         address.Width = LeftW;
         autoCheck.Size = new Size(LeftW, 24);
         autoCheck.Margin = new Padding(0, 2, 0, 0);
+        var languages = Z.Bar(DockStyle.None, english, russian);
+        english.Margin = new Padding(0);   // the pair touches, like the List / Thumbnails switch
+        Z.Active(english, !L.Ru);
+        Z.Active(russian, L.Ru);
         flow.Controls.AddRange(new Control[] {
             Header(),
-            Head("UPDATES"), updateState, Z.Bar(DockStyle.None, check, download), autoCheck,
-            Head("REPORT A PROBLEM"),
-            Line("ZRAW Studio writes a log of each session. If something goes wrong, open the log folder and"),
-            Line("attach the newest file to your report, together with what you were doing."),
+            Head(L.T("LANGUAGE")), languages,
+            Head(L.T("UPDATES")), updateState, Z.Bar(DockStyle.None, check, download), autoCheck,
+            Head(L.T("REPORT A PROBLEM")),
+            Line(L.T("ZRAW Studio writes a log of each session. If something goes wrong, open the log folder and")),
+            Line(L.T("attach the newest file to your report, together with what you were doing.")),
             Z.Bar(DockStyle.None, logs, report), problemState,
-            Head("DONATE"),
-            Line("ZRAW Studio is free. If it saves you time, you can support its development with Monero (XMR):"),
+            Head(L.T("DONATE")),
+            Line(L.T("ZRAW Studio is free. If it saves you time, you can support its development with Monero (XMR):")),
             address, Z.Bar(DockStyle.None, copy, wallet), walletState });
         main.Controls.Add(flow);
 
@@ -89,16 +97,16 @@ public class AboutPage : UserControl
         credits.Padding = new Padding(20, 20, 0, 14);
         credits.Width = CreditW + 40;
         var list = Column();
-        list.Controls.Add(Head("CREDITS", true));
-        Credit(list, "zraw-parser", "storyboardcreativity, GPL-2.0", "https://github.com/storyboardcreativity/zraw-parser", "ZRAW Studio grew out of this converter.");
-        Credit(list, "zraw-decoder-lib", "storyboardcreativity, GPL-2.0", "https://github.com/storyboardcreativity/zraw-decoder-lib", "The engine's ZRAW decoder is ported from this library.");
-        Credit(list, "tiny-mov-library", "storyboardcreativity, MIT", "https://github.com/storyboardcreativity/tiny-mov-library", "MOV reading and writing in the engine.");
-        Credit(list, "ReaLTaiizor", "Taiizor, MIT", "https://github.com/Taiizor/ReaLTaiizor", "The Metro controls that make up this window.");
-        Credit(list, "tinydngloader", "Syoyo Fujita, MIT", "https://github.com/syoyo/tinydngloader", "tiny_dng_writer writes the lossless and uncompressed DNGs.");
-        Credit(list, "mpv", "the mpv developers, client API under ISC", "https://mpv.io", "The ZRAW plugin runs inside mpv.");
-        list.Controls.Add(Head("LICENSE"));
-        list.Controls.Add(Note("ZRAW Studio is free software under the GNU GPL v2."));
-        list.Controls.Add(Link("Read the license", Updates.Repo + "/blob/main/LICENSE"));
+        list.Controls.Add(Head(L.T("CREDITS"), true));
+        Credit(list, "zraw-parser", "storyboardcreativity, GPL-2.0", "https://github.com/storyboardcreativity/zraw-parser", L.T("ZRAW Studio grew out of this converter."));
+        Credit(list, "zraw-decoder-lib", "storyboardcreativity, GPL-2.0", "https://github.com/storyboardcreativity/zraw-decoder-lib", L.T("The engine's ZRAW decoder is ported from this library."));
+        Credit(list, "tiny-mov-library", "storyboardcreativity, MIT", "https://github.com/storyboardcreativity/tiny-mov-library", L.T("MOV reading and writing in the engine."));
+        Credit(list, "ReaLTaiizor", "Taiizor, MIT", "https://github.com/Taiizor/ReaLTaiizor", L.T("The Metro controls that make up this window."));
+        Credit(list, "tinydngloader", "Syoyo Fujita, MIT", "https://github.com/syoyo/tinydngloader", L.T("tiny_dng_writer writes the lossless and uncompressed DNGs."));
+        Credit(list, "mpv", L.T("the mpv developers, client API under ISC"), "https://mpv.io", L.T("The ZRAW plugin runs inside mpv."));
+        list.Controls.Add(Head(L.T("LICENSE")));
+        list.Controls.Add(Note(L.T("ZRAW Studio is free software under the GNU GPL v2.")));
+        list.Controls.Add(Link(L.T("Read the license"), Updates.Repo + "/blob/main/LICENSE"));
         credits.Controls.Add(list);
 
         Controls.Add(main);
@@ -106,27 +114,42 @@ public class AboutPage : UserControl
         Controls.Add(credits);
 
         download.Visible = problemState.Visible = walletState.Visible = false;   // status lines show up only when they have news
-        updateState.Text = "Not checked yet.";
+        updateState.Text = L.T("Not checked yet.");
         autoCheck.Checked = Settings.Get("updateCheck", "1") == "1";
         autoCheck.CheckedChanged += s => { Settings.Set("updateCheck", autoCheck.Checked ? "1" : "0"); Settings.Save(); };
+        english.Click += (s, e) => Language("en");
+        russian.Click += (s, e) => Language("ru");
         check.Click += (s, e) => Check(null);
         download.Click += (s, e) => Open(Updates.Repo + "/releases/latest", updateState);
         logs.Click += (s, e) =>
         {
             try { Directory.CreateDirectory(LogFile.Dir); Process.Start("explorer.exe", "\"" + LogFile.Dir + "\""); }
-            catch (Exception ex) { Say(problemState, "Could not open " + LogFile.Dir + ": " + ex.Message, Z.RedHover); }
+            catch (Exception ex) { Say(problemState, L.F("Could not open {0}: {1}", LogFile.Dir, ex.Message), Z.RedHover); }
         };
         report.Click += (s, e) => Open(Updates.Repo + "/issues", problemState);
         copy.Click += (s, e) =>
         {
-            try { Clipboard.SetText(Monero); Say(walletState, "Address copied. Thank you!", Z.Good); }
-            catch (Exception ex) { Say(walletState, "Could not copy: " + ex.Message, Z.RedHover); }
+            try { Clipboard.SetText(Monero); Say(walletState, L.T("Address copied. Thank you!"), Z.Good); }
+            catch (Exception ex) { Say(walletState, L.F("Could not copy: {0}", ex.Message), Z.RedHover); }
         };
         wallet.Click += (s, e) =>
         {
             try { Process.Start("monero:" + Monero); }
-            catch { Say(walletState, "No Monero wallet opens monero: links on this PC. Copy the address instead.", Z.Dim); }
+            catch { Say(walletState, L.T("No Monero wallet opens monero: links on this PC. Copy the address instead."), Z.Dim); }
         };
+    }
+
+    // The text is chosen when the window opens, so switching reopens ZRAW Studio. Closing asks first if a
+    // conversion is running; if that keeps the window open, the language stays as it is.
+    void Language(string code)
+    {
+        if (code == L.Code) return;
+        string before = Settings.Get("language", "");
+        Settings.Set("language", code);
+        var form = FindForm();
+        form.Close();   // saves the settings
+        if (form.IsDisposed) Process.Start(Application.ExecutablePath);
+        else Settings.Set("language", before);
     }
 
     // Checks GitHub in the background. With `notify`, a quiet check at start-up: says nothing unless
@@ -135,7 +158,7 @@ public class AboutPage : UserControl
     {
         if (Interlocked.Exchange(ref checking, 1) == 1) return;
         if (!IsHandleCreated) CreateHandle();   // the tab may not have been shown yet; the answer comes back through it
-        if (notify == null) Say(updateState, "Checking...", Z.Dim);
+        if (notify == null) Say(updateState, L.T("Checking..."), Z.Dim);
         ThreadPool.QueueUserWorkItem(_ =>
         {
             Version latest = null;
@@ -147,14 +170,14 @@ public class AboutPage : UserControl
                 checking = 0;
                 if (latest != null && Updates.IsNewer(latest))
                 {
-                    Say(updateState, "Version " + latest + " is available. You have " + Updates.Version + ".", Color.White);
+                    Say(updateState, L.F("Version {0} is available. You have {1}.", latest, Updates.Version), Color.White);
                     download.Visible = true;
-                    if (notify != null) notify("ZRAW Studio " + latest + " is available. Download it from the About tab.");
+                    if (notify != null) notify(L.F("ZRAW Studio {0} is available. Download it from the About tab.", latest));
                     LogFile.Append("Update available: " + latest);
                 }
                 else if (notify != null) return;
-                else if (latest != null) Say(updateState, "You have the latest version.", Z.Good);
-                else Say(updateState, "Could not check for updates: " + error, Z.RedHover);
+                else if (latest != null) Say(updateState, L.T("You have the latest version."), Z.Good);
+                else Say(updateState, L.F("Could not check for updates: {0}", error), Z.RedHover);
             }));
         });
     }
@@ -173,7 +196,7 @@ public class AboutPage : UserControl
         var logo = new PictureBox { Size = new Size(64, 64), Location = new Point(0, 4), SizeMode = PictureBoxSizeMode.CenterImage, BackColor = Z.Panel };
         try { using (var s = typeof(Z).Assembly.GetManifestResourceStream("icon.ico")) logo.Image = new Icon(s, 64, 64).ToBitmap(); } catch { }
         var name = new Label { Text = "ZRAW Studio", Font = Z.BigFont, ForeColor = Z.Text, BackColor = Z.Panel, AutoSize = true, Location = new Point(78, 0) };
-        var version = Z.Text1("Version " + Updates.Version, Z.Dim, 300, 20);
+        var version = Z.Text1(L.F("Version {0}", Updates.Version), Z.Dim, 300, 20);
         version.Location = new Point(81, 38);
         var page = Link(Updates.Repo.Substring("https://".Length), Updates.Repo);
         page.Location = new Point(81, 57);
@@ -210,6 +233,6 @@ public class AboutPage : UserControl
 
     static void Open(string url, Label status)
     {
-        try { Process.Start(url); } catch (Exception ex) { Say(status, "Could not open " + url + ": " + ex.Message, Z.RedHover); }
+        try { Process.Start(url); } catch (Exception ex) { Say(status, L.F("Could not open {0}: {1}", url, ex.Message), Z.RedHover); }
     }
 }

@@ -25,12 +25,12 @@ using ReaLTaiizor.Forms;
 using ReaLTaiizor.Child.Metro;
 using Microsoft.Win32;
 
-// The version shown on the About tab and compared with GitHub release tags (v1.0.0)
+// The version shown on the About tab and compared with GitHub release tags (v1.0.1)
 [assembly: AssemblyTitle("ZRAW Studio")]
 [assembly: AssemblyProduct("ZRAW Studio")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyInformationalVersion("1.0.1")]
 
 // Z CAM palette
 static class Z
@@ -194,10 +194,13 @@ static class Z
         return r;
     }
 
+    // Lines that start with one of these show in red; the engine's "frame N" errors are always English
+    static readonly string[] Problems = { "SKIP", "FAILED", "WARNING", "ERROR", "frame ", L.T("SKIP"), L.T("FAILED"), L.T("WARNING"), L.T("ERROR") };
+
     public static void Write(RichTextBox box, string s)
     {
         if (box.InvokeRequired) { box.BeginInvoke(new Action<RichTextBox, string>(Write), box, s); return; }
-        bool bad = s.StartsWith("SKIP") || s.StartsWith("FAILED") || s.StartsWith("WARNING") || s.StartsWith("ERROR") || s.StartsWith("frame ");
+        bool bad = Problems.Any(p => s.StartsWith(p));
         box.SelectionStart = box.TextLength;
         box.SelectionColor = Dim;
         box.AppendText(DateTime.Now.ToString("HH:mm:ss  "));
@@ -629,7 +632,7 @@ static class Embedded
 // previews and thumbnails, and for mpv through the plugin's script-opts\zraw.conf.
 static class Look
 {
-    public static readonly string[] Names = { "ZRAW Studio", "ZCam-DNG (zraw-parser)", "Camera built-in matrix", "VideoSuite" };   // as on the Convert tab
+    public static readonly string[] Names = { "ZRAW Studio", "ZCam-DNG (zraw-parser)", L.T("Camera built-in matrix"), "VideoSuite" };   // also the Convert tab's color choices
     static readonly string[] ConfNames = { "zrawstudio", "zcamdng", "camera", "videosuite" };   // the engine's kPreviewMatrixNames
     public static readonly double[] Exposures = { -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4 };
 
@@ -893,7 +896,7 @@ class TabStrip : Panel
 class ConfirmForm : MetroForm
 {
     const int W = 480;
-    readonly ZCheck again = Z.Check("Don't show this again");
+    readonly ZCheck again = Z.Check(L.T("Don't show this again"));
     public bool DontShowAgain { get { return again.Checked; } }
 
     public ConfirmForm(string title, string text, string yes)
@@ -907,7 +910,7 @@ class ConfirmForm : MetroForm
         again.Size = new Size(W, 24);
         again.Margin = new Padding(0, 0, 0, 16);
         var ok = Z.Button(yes, true);
-        var cancel = Z.Button("Cancel", false);
+        var cancel = Z.Button(L.T("Cancel"), false);
         ok.Click += (s, e) => { DialogResult = DialogResult.OK; Close(); };
         cancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
         KeyPreview = true;
@@ -938,10 +941,10 @@ public class StudioForm : MetroForm
         StartPosition = FormStartPosition.CenterScreen;
         Z.Dress(this);
 
-        tabs.Add("Convert", convert);
-        tabs.Add("Tagger", tagger);
-        tabs.Add("Player", player);
-        tabs.Add("About", about);
+        tabs.Add(L.T("Convert"), convert);
+        tabs.Add(L.T("Tagger"), tagger);
+        tabs.Add(L.T("Player"), player);
+        tabs.Add(L.T("About"), about);
         Controls.Add(tabs.Host);
         Controls.Add(tabs);
 
@@ -1000,7 +1003,7 @@ static class Program
         Application.ThreadException += (s, e) =>
         {
             LogFile.Append("ERROR (unexpected): " + e.Exception);
-            MessageBox.Show("Something went wrong:\n\n" + e.Exception.Message + "\n\nThe details are in the log. To find it, open the About tab and click Open log folder.",
+            MessageBox.Show(L.F("Something went wrong:\n\n{0}\n\nThe details are in the log. To find it, open the About tab and click Open log folder.", e.Exception.Message),
                             "ZRAW Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
         };
         AppDomain.CurrentDomain.UnhandledException += (s, e) => LogFile.Append("ERROR (fatal): " + e.ExceptionObject);

@@ -47,7 +47,7 @@ public class ThumbView : ScrollableControl
     readonly DataGridView grid;
     readonly int statusCol;
     readonly int[] rightCols;     // shown at the right of the status line
-    public string EmptyText = "Drag and drop video files here";   // faint, in the middle of an empty view
+    public string EmptyText = L.T("Drag and drop video files here");   // faint, in the middle of an empty view
     public Action<string> Open;   // double-click
     public Action Remove;         // Delete key
     int anchor = -1, hover = -1;
@@ -75,8 +75,8 @@ public class ThumbView : ScrollableControl
     // The List / Thumbnails pair for a toolbar; remembers the choice under `setting`
     public FlowLayoutPanel Switcher(string setting)
     {
-        var list = Z.Button("List", false);
-        var tiles = Z.Button("Thumbnails", false);
+        var list = Z.Button(L.T("List"), false);
+        var tiles = Z.Button(L.T("Thumbnails"), false);
         var bar = Z.Bar(DockStyle.Right, list, tiles);
         list.Margin = new Padding(0);   // the pair touches, like a segmented switch
         Action<bool> show = on =>
@@ -190,7 +190,7 @@ public class ThumbView : ScrollableControl
                 g.DrawImage(t.Image, pic.X + (tw - w) / 2, pic.Y + (th - h) / 2, w, h);
                 if (t.Dim) using (var b = new SolidBrush(Color.FromArgb(110, Z.Ink))) g.FillRectangle(b, pic);
             }
-            else TextRenderer.DrawText(g, t.Note ?? (t.Failed ? "No preview" : "Loading..."), Z.UiFont, pic, Z.Dim, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            else TextRenderer.DrawText(g, t.Note ?? L.T(t.Failed ? "No preview" : "Loading..."), Z.UiFont, pic, Z.Dim, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             if (t.Progress >= 0)   // converting: progress along the bottom of the picture
                 using (var b = new SolidBrush(Z.Red)) g.FillRectangle(b, pic.X, pic.Bottom - 4, (int)(tw * Math.Min(1, t.Progress)), 4);
 

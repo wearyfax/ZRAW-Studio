@@ -39,17 +39,17 @@ public class ConvertPage : UserControl
     readonly DataGridView grid = Z.Grid();
     readonly ThumbView thumbs;
     readonly RichTextBox log = Z.Log();
-    readonly MetroButton add = Z.Button("Add clips...", false), addFolder = Z.Button("Add folder...", false), remove = Z.Button("Remove", false), clear = Z.Button("Clear", false);
-    readonly MetroButton start = Z.Button("Start", true), pause = Z.Button("Pause", false), stop = Z.Button("Stop", false), browse = Z.Button("Browse...", false), openOut = Z.Button("Open", false);
-    readonly MetroComboBox format = Z.Combo("Lossy CinemaDNG (Resolve)", "Lossless CinemaDNG", "Uncompressed", "Uncompressed, packed 12-bit");
-    readonly MetroComboBox scale = Z.Combo("Full resolution", "Half resolution", "Quarter resolution");
-    readonly MetroComboBox denoise = Z.Combo("Off", "Light", "Strong");   // engine --denoise [light|strong]: temporal raw denoise on the GPU
-    readonly MetroComboBox colorMatrix = Z.Combo("ZRAW Studio", "ZCam-DNG (zraw-parser)", "Camera built-in matrix", "VideoSuite");   // DNG color matrices (engine default / --zcam-dng-color / --camera-color / --videosuite-color)
+    readonly MetroButton add = Z.Button(L.T("Add clips..."), false), addFolder = Z.Button(L.T("Add folder..."), false), remove = Z.Button(L.T("Remove"), false), clear = Z.Button(L.T("Clear"), false);
+    readonly MetroButton start = Z.Button(L.T("Start"), true), pause = Z.Button(L.T("Pause"), false), stop = Z.Button(L.T("Stop"), false), browse = Z.Button(L.T("Browse..."), false), openOut = Z.Button(L.T("Open"), false);
+    readonly MetroComboBox format = Z.Combo(L.T("Lossy CinemaDNG (Resolve)"), L.T("Lossless CinemaDNG"), L.T("Uncompressed"), L.T("Uncompressed, packed 12-bit"));
+    readonly MetroComboBox scale = Z.Combo(L.T("Full resolution"), L.T("Half resolution"), L.T("Quarter resolution"));
+    readonly MetroComboBox denoise = Z.Combo(L.T("Off"), L.T("Light"), L.T("Strong"));   // engine --denoise [light|strong]: temporal raw denoise on the GPU
+    readonly MetroComboBox colorMatrix = Z.Combo(Look.Names);   // DNG color matrices (engine default / --zcam-dng-color / --camera-color / --videosuite-color)
     readonly MetroTrackBar ratio = Z.Slider(15, 120, 30);   // tenths: 1.5:1 to 12:1
-    readonly MetroComboBox rateMode = Z.Combo("Fixed ratio", "Fixed quality per shot");
+    readonly MetroComboBox rateMode = Z.Combo(L.T("Fixed ratio"), L.T("Fixed quality per shot"));
     readonly MetroTrackBar level = Z.Slider(0, 7, 2);        // fixed quality: index into the Level tables below
     readonly MetroLabel ratioText = Z.Label("3.0 : 1", Color.White, Z.BigFont);
-    readonly MetroLabel equivText = Z.Label("equivalent", Z.Dim, Z.UiFont);   // after a fixed-quality level name
+    readonly MetroLabel equivText = Z.Label(L.T("equivalent"), Z.Dim, Z.UiFont);   // after a fixed-quality level name
     readonly Label sizeText = Z.Text1("", Z.Text, OW - LW, 22), errorText = Z.Text1("", Z.Text, OW - LW, 22), gradeText = Z.Text1("", Z.Text, OW - LW, 22), proresText = Z.Text1("", Z.Text, OW - LW, 22);
     readonly MetroSwitch gpu = Z.Switch();
     // One checkbox per GPU (gpuinfo order, fastest first); several can share the work
@@ -58,9 +58,9 @@ public class ConvertPage : UserControl
     readonly ZNumeric threads = Z.Numeric(1, Environment.ProcessorCount, Environment.ProcessorCount);   // up to the logical CPU count
     readonly MetroTextBox output = Z.TextBox();
     // Off at every start on purpose: deleting footage should be a choice made for this batch
-    readonly ZCheck deleteSource = Z.Check("Delete source clips after converting");
-    readonly ZCheck folderIcons = Z.Check("Show a frame of each clip as its folder icon");
-    readonly ZCheck skipConverted = Z.Check("Skip already converted ZRAW clips");
+    readonly ZCheck deleteSource = Z.Check(L.T("Delete source clips after converting"));
+    readonly ZCheck folderIcons = Z.Check(L.T("Show a frame of each clip as its folder icon"));
+    readonly ZCheck skipConverted = Z.Check(L.T("Skip already converted ZRAW clips"));
     readonly MetroProgressBar overall = Z.Progress();
     readonly Label status = Z.Text1("", Z.Dim, 520, 22);
     readonly Label eta = Z.Text1("", Z.Text, 100, Z.RowHeight);   // queue time left, right-aligned on the run row
@@ -86,13 +86,13 @@ public class ConvertPage : UserControl
         thumbs = new ThumbView(grid, 4, 1, 3) { Remove = RemoveSelected };
         thumbs.Open = p => PreviewForm.Open(p, FindForm(), Write);
 
-        Z.Hint(grid, "Drag and drop video files here");
-        grid.Columns.Add("clip", "Clip");
-        grid.Columns.Add("type", "Type");
-        grid.Columns.Add("frames", "Frames");
-        grid.Columns.Add("length", "Length");
-        grid.Columns.Add("status", "Status");
-        grid.Columns.Add("progress", "Progress");
+        Z.Hint(grid, thumbs.EmptyText);
+        grid.Columns.Add("clip", L.T("Clip"));
+        grid.Columns.Add("type", L.T("Type"));
+        grid.Columns.Add("frames", L.T("Frames"));
+        grid.Columns.Add("length", L.T("Length"));
+        grid.Columns.Add("status", L.T("Status"));
+        grid.Columns.Add("progress", L.T("Progress"));
         grid.Columns[0].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
         grid.Columns[1].Width = 110; grid.Columns[2].Width = 70; grid.Columns[3].Width = 70; grid.Columns[4].Width = 250; grid.Columns[5].Width = 80;
         foreach (DataGridViewColumn col in grid.Columns) col.SortMode = DataGridViewColumnSortMode.NotSortable;   // no sort glyph gap, headers sit over their values
@@ -136,11 +136,11 @@ public class ConvertPage : UserControl
         VisibleChanged += fit;
         output.Width = ratio.Width = level.Width = OW;
         format.Width = OW - LW;   // beside the FORMAT heading
-        toolTip.SetToolTip(gpu, "Use the GPU for lossy compression. Tick the GPUs to use below.");
+        toolTip.SetToolTip(gpu, L.T("Use the GPU for lossy compression. Tick the GPUs to use below."));
         format.Margin = output.Margin = new Padding(0, 0, 0, 4);
         rateMode.Width = OW - LW;
         // The mode choice shares the COMPRESSION heading's row, so it adds no height to the column
-        var compressionHead = Head("COMPRESSION", rateMode, false);
+        var compressionHead = Head(L.T("COMPRESSION"), rateMode, false);
         // Fixed quality names a ProRes or H.265 level; a small "equivalent" after the name marks the
         // level as a comparison, not the format being written
         var ratioRow = new Panel { Size = new Size(OW, ratioText.PreferredSize.Height), BackColor = Z.Panel, Margin = new Padding(0) };
@@ -155,17 +155,17 @@ public class ConvertPage : UserControl
         ratioText.Margin = new Padding(0);
         gpu.Size = new Size(50, 22);
         foreach (var c in new Control[] { scale, denoise, colorMatrix, threads }) c.Width = OW - LW;
-        toolTip.SetToolTip(denoise, "Removes noise from the raw data on the GPU before the DNGs are written. Each frame is merged with\n" +
+        toolTip.SetToolTip(denoise, L.T("Removes noise from the raw data on the GPU before the DNGs are written. Each frame is merged with\n" +
             "its neighbors (two on each side for Light, three for Strong), using the camera's measured noise at the clip's ISO.\n" +
             "Where something moves, the frame keeps its own pixels, so there is no ghosting. Light leaves about 45% of the\n" +
             "noise and does not soften edges. In fixed-quality mode the files also get 20 to 35% smaller.\n" +
             "Conversion runs at about half the speed, and the DNGs no longer contain the camera's original data.\n" +
-            "Only whole frames are aligned, so it works best on tripod and gimbal shots.");
-        toolTip.SetToolTip(colorMatrix, "Color matrix written into the DNGs.\nZRAW Studio: matrices calibrated by ZRAW Studio for accurate color.\nZCam-DNG (zraw-parser): Z CAM's factory matrices, the same ones the camera firmware's DNG writer and zraw-parser use.\nCamera built-in matrix: the matrices the camera stores in every RAW frame, for each shot's color temperature.\nVideoSuite: Z CAM's ZRAW VideoSuite matrix (the one Z CAM uses for ZLog2 footage).");
+            "Only whole frames are aligned, so it works best on tripod and gimbal shots."));
+        toolTip.SetToolTip(colorMatrix, L.T("Color matrix written into the DNGs.\nZRAW Studio: matrices calibrated by ZRAW Studio for accurate color.\nZCam-DNG (zraw-parser): Z CAM's factory matrices, the same ones the camera firmware's DNG writer and zraw-parser use.\nCamera built-in matrix: the matrices the camera stores in every RAW frame, for each shot's color temperature.\nVideoSuite: Z CAM's ZRAW VideoSuite matrix (the one Z CAM uses for ZLog2 footage)."));
         var outRow = Z.Bar(DockStyle.None, browse, openOut);
         outRow.Size = new Size(OW - LW, browse.Height + browse.Margin.Vertical);   // explicit height; without it the row comes out 100 px tall
-        toolTip.SetToolTip(errorText, "Typical error per pixel against the sensor's own noise, measured on Z CAM E2 footage.\nBelow 100% it stays inside the grain the camera records anyway.");
-        toolTip.SetToolTip(proresText, "The lowest ProRes level this ratio still matches in the developed log image (UHD 24p, ffmpeg's prores_ks).\n" +
+        toolTip.SetToolTip(errorText, L.T("Typical error per pixel against the sensor's own noise, measured on Z CAM E2 footage.\nBelow 100% it stays inside the grain the camera records anyway."));
+        toolTip.SetToolTip(proresText, L.T("The lowest ProRes level this ratio still matches in the developed log image (UHD 24p, ffmpeg's prores_ks).\n" +
             "Same quality, ProRes bitrate vs raw:\n" +
             "    4444 XQ   1,654 Mb/s   2.6:1, about 910 Mb/s (45% less)\n" +
             "    4444      1,109 Mb/s   3.1:1, about 775 Mb/s (30% less)\n" +
@@ -174,34 +174,35 @@ public class ConvertPage : UserControl
             "    LT          347 Mb/s   5.7:1, about 420 Mb/s (20% more)\n" +
             "    Proxy       140 Mb/s   10:1, about 230 Mb/s (65% more)\n" +
             "4:1 gives 422 HQ quality at about three quarters of its bitrate. Past about 6:1 raw needs more bits than\n" +
-            "ProRes LT or Proxy for the same look, so treat those ratios as proxy or offline settings, not masters.");
-        toolTip.SetToolTip(gradeText, "From about 6:1 up, this shows the E2's own H.265 setting (UHD 24p, 10-bit 4:2:0) that looks about the same\nafter developing to log, matched by eye and by error in the developed image:\nHigh 200 Mb/s is about 7:1, Medium 130 Mb/s about 8 to 9:1, Low 60 Mb/s about 12:1.\nLossy raw needs 1.5 to 3 times the H.265 bitrate for the same look; it keeps full color resolution.");
+            "ProRes LT or Proxy for the same look, so treat those ratios as proxy or offline settings, not masters."));
+        toolTip.SetToolTip(gradeText, L.T("From about 6:1 up, this shows the E2's own H.265 setting (UHD 24p, 10-bit 4:2:0) that looks about the same\nafter developing to log, matched by eye and by error in the developed image:\nHigh 200 Mb/s is about 7:1, Medium 130 Mb/s about 8 to 9:1, Low 60 Mb/s about 12:1.\nLossy raw needs 1.5 to 3 times the H.265 bitrate for the same look; it keeps full color resolution."));
         flow.Controls.AddRange(new Control[] {
-            Head("FORMAT", format, true),
-            compressionHead, ratioRow, ratio, level, Field("Size", sizeText), Field("Error", errorText), Field("Quality", gradeText), Field("Matches", proresText),
-            Head("PROCESSING", gpu, false), gpuList, Field("Resolution", scale), Field("Denoise", denoise), Field("Color", colorMatrix), Field("CPU threads", threads),
-            Head("FOLDER", outRow, false), output, skipConverted, deleteSource, folderIcons });
+            Head(L.T("FORMAT"), format, true),
+            compressionHead, ratioRow, ratio, level, Field(L.T("Size"), sizeText), Field(L.T("Error"), errorText), Field(L.T("Quality"), gradeText), Field(L.T("Matches"), proresText),
+            Head(L.T("PROCESSING"), gpu, false), gpuList, Field(L.T("Resolution"), scale), Field(L.T("Denoise"), denoise), Field(L.T("Color"), colorMatrix), Field(L.T("CPU threads"), threads),
+            Head(L.T("FOLDER"), outRow, false), output, skipConverted, deleteSource, folderIcons });
         skipConverted.Size = deleteSource.Size = folderIcons.Size = new Size(OW, 21);
         skipConverted.Margin = new Padding(0, 2, 0, 0);
         deleteSource.Margin = folderIcons.Margin = new Padding(0, 1, 0, 0);
-        toolTip.SetToolTip(skipConverted, "ZRAW Studio skips clips that already have a conversion in the output folder, without asking.\nUntick this to be asked whether to overwrite them instead.");
-        toolTip.SetToolTip(folderIcons, "Each clip's DNG folder shows a frame of the clip in Explorer instead of the plain folder icon,\nso a folder full of conversions is easy to browse.\nTwo hidden files in the folder do it (an .ico file and desktop.ini); nothing else changes.");
-        toolTip.SetToolTip(deleteSource, "Each source clip goes to the Recycle Bin once its conversion has finished with no errors\nand the new files check out on disk. Clips on drives without a Recycle Bin are kept.");
+        toolTip.SetToolTip(skipConverted, L.T("ZRAW Studio skips clips that already have a conversion in the output folder, without asking.\nUntick this to be asked whether to overwrite them instead."));
+        toolTip.SetToolTip(folderIcons, L.T("Each clip's DNG folder shows a frame of the clip in Explorer instead of the plain folder icon,\nso a folder full of conversions is easy to browse.\nTwo hidden files in the folder do it (an .ico file and desktop.ini); nothing else changes."));
+        toolTip.SetToolTip(deleteSource, L.T("Each source clip goes to the Recycle Bin once its conversion has finished with no errors\nand the new files check out on disk. Clips on drives without a Recycle Bin are kept."));
         opts.Controls.Add(flow);
 
         // Bottom: run controls, progress, log
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 180, BackColor = Z.Panel, Padding = new Padding(0, 10, 0, 0) };
         start.Width = 120;
+        pause.Width = Math.Max(pause.Width, TextRenderer.MeasureText(L.T("Resume"), Z.UiFont).Width + 36);   // wide enough for both of its texts
         var runRow = new Panel { Dock = DockStyle.Top, Height = Z.RowHeight + 10, BackColor = Z.Panel };
         eta.Dock = DockStyle.Fill;
         eta.TextAlign = ContentAlignment.MiddleRight;
         eta.Padding = new Padding(0, 0, 0, 10);
         runRow.Controls.Add(eta);
         runRow.Controls.Add(Z.Bar(DockStyle.Left, start, pause, stop, status));
-        toolTip.SetToolTip(pause, "Freezes the conversion so the CPU and GPU are free for something else.\nResume continues from the same frame.");
+        toolTip.SetToolTip(pause, L.T("Freezes the conversion so the CPU and GPU are free for something else.\nResume continues from the same frame."));
         status.Margin = new Padding(8, (Z.RowHeight - status.Height) / 2, 0, 0);
-        gpuList.Controls.Add(Z.Text1("Checking...", Z.Dim, OW - LW, 22));
-        toolTip.SetToolTip(gpuList, "Tick every GPU that should help. A much slower GPU next to a fast one can slow the whole run down.");
+        gpuList.Controls.Add(Z.Text1(L.T("Checking..."), Z.Dim, OW - LW, 22));
+        toolTip.SetToolTip(gpuList, L.T("Tick every GPU that should help. A much slower GPU next to a fast one can slow the whole run down."));
         var barRow = new Panel { Dock = DockStyle.Top, Height = 18, BackColor = Z.Panel, Padding = new Padding(0, 0, 0, 8) };
         overall.Dock = DockStyle.Fill;
         barRow.Controls.Add(overall);
@@ -223,11 +224,11 @@ public class ConvertPage : UserControl
         ratio.Value = 30;   // 3:1 on every launch; a run uses whatever the slider shows
         level.Value = 2;    // fixed quality starts at ProRes 422 HQ on every launch, like the ratio
         rateMode.SelectedIndex = Settings.Get("rateMode", "0") == "1" ? 1 : 0;
-        toolTip.SetToolTip(rateMode, "Fixed ratio: every frame the same size.\n" +
+        toolTip.SetToolTip(rateMode, L.T("Fixed ratio: every frame the same size.\n" +
             "Fixed quality: every shot gets at least the chosen quality; the size is set per shot from its ISO and content.\n" +
             "Clean, bright, low-ISO shots get more bits, dark or grainy ones fewer. On average it is about the same size\n" +
-            "as the fixed ratio that matches the level, but no shot falls below it, shadows included. The ISO is read from each clip.");
-        toolTip.SetToolTip(level, "Each level is the quality a typical shot gets at the fixed ratio that matched that ProRes or\nE2 H.265 setting by eye. Fixed quality gives every shot that quality.");
+            "as the fixed ratio that matches the level, but no shot falls below it, shadows included. The ISO is read from each clip."));
+        toolTip.SetToolTip(level, L.T("Each level is the quality a typical shot gets at the fixed ratio that matched that ProRes or\nE2 H.265 setting by eye. Fixed quality gives every shot that quality."));
         scale.SelectedIndex = Clamp(Int("scale", 0), 0, 2);
         denoise.SelectedIndex = Clamp(Int("denoise", 0), 0, 2);
         colorMatrix.SelectedIndex = Clamp(Int("color", 0), 0, 3);
@@ -237,12 +238,12 @@ public class ConvertPage : UserControl
 
         add.Click += (s, e) =>
         {
-            using (var d = new OpenFileDialog { Multiselect = true, Filter = "Z CAM clips (*.mov, *.zraw)|*.mov;*.zraw|All files|*.*", Title = "Add ZRAW clips" })
+            using (var d = new OpenFileDialog { Multiselect = true, Filter = L.T("Z CAM clips (*.mov, *.zraw)|*.mov;*.zraw|All files|*.*"), Title = L.T("Add ZRAW clips") })
                 if (d.ShowDialog(this) == DialogResult.OK) Add(d.FileNames);
         };
         addFolder.Click += (s, e) =>
         {
-            string dir = FolderPicker.Pick(this, "Add a folder of ZRAW clips (subfolders included)", Settings.Get("addFolder", ""));
+            string dir = FolderPicker.Pick(this, L.T("Add a folder of ZRAW clips (subfolders included)"), Settings.Get("addFolder", ""));
             if (dir == null) return;
             Settings.Set("addFolder", dir);
             Add(new[] { dir });
@@ -251,7 +252,7 @@ public class ConvertPage : UserControl
         clear.Click += (s, e) => { clips.Clear(); grid.Rows.Clear(); thumbs.Refill(); Summary(); };
         browse.Click += (s, e) =>
         {
-            string dir = FolderPicker.Pick(this, "Choose the output folder", output.Text);
+            string dir = FolderPicker.Pick(this, L.T("Choose the output folder"), output.Text);
             if (dir != null) output.Text = dir;
         };
         openOut.Click += (s, e) => { if (Directory.Exists(output.Text)) Process.Start("explorer.exe", "\"" + output.Text + "\""); };
@@ -261,11 +262,11 @@ public class ConvertPage : UserControl
         rateMode.SelectedIndexChanged += (s, e) =>
         {
             if (rateMode.SelectedIndex == 1 && Settings.Get("qualityNoAsk", "0") != "1")
-                using (var f = new ConfirmForm("Fixed quality and auto ISO",
-                    "Fixed quality reads each clip's ISO and sets the size from the noise at that ISO.\n\n" +
+                using (var f = new ConfirmForm(L.T("Fixed quality and auto ISO"),
+                    L.T("Fixed quality reads each clip's ISO and sets the size from the noise at that ISO.\n\n" +
                     "The camera records the ISO once per clip. If a clip was shot with auto ISO and the ISO changed " +
-                    "during the shot, the size can be wrong for part of it. Use a fixed ratio for auto ISO clips.",
-                    "Use fixed quality"))
+                    "during the shot, the size can be wrong for part of it. Use a fixed ratio for auto ISO clips."),
+                    L.T("Use fixed quality")))
                 {
                     if (f.ShowDialog(FindForm()) != DialogResult.OK) { rateMode.SelectedIndex = 0; return; }
                     if (f.DontShowAgain) Settings.Set("qualityNoAsk", "1");
@@ -286,14 +287,14 @@ public class ConvertPage : UserControl
         deleteSource.CheckedChanged += (s) =>
         {
             if (!deleteSource.Checked || Settings.Get("deleteNoAsk", "0") == "1") return;
-            using (var f = new ConfirmForm("Delete source clips?",
-                "After each clip converts with no errors and its new files check out on disk, ZRAW Studio moves the " +
+            using (var f = new ConfirmForm(L.T("Delete source clips?"),
+                L.T("After each clip converts with no errors and its new files check out on disk, ZRAW Studio moves the " +
                 "original clip to the Recycle Bin, where you can restore it until the bin is emptied.\n\n" +
                 "Clips on drives without a Recycle Bin, such as SD cards in a card reader, stay where they are. Windows asks " +
                 "first if a clip is too big for the Recycle Bin.\n\n" +
                 "Lossy CinemaDNG is not an exact copy of the original. Delete the originals only if you are sure you " +
-                "will not need them again.",
-                "Delete after converting"))
+                "will not need them again."),
+                L.T("Delete after converting")))
             {
                 if (f.ShowDialog(FindForm()) != DialogResult.OK) deleteSource.Checked = false;
                 else if (f.DontShowAgain) { Settings.Set("deleteNoAsk", "1"); Settings.Save(); }
@@ -306,7 +307,7 @@ public class ConvertPage : UserControl
         RatioChanged();
         Running(false);
         // Posted so it lands after the window's final layout; written earlier, the log opens scrolled down a line
-        Load += (s, e) => BeginInvoke(new Action(() => Write("Ready. Lossy CinemaDNG at 3.0:1 is the default; the slider sets the compression. Double-click a clip to preview it.")));
+        Load += (s, e) => BeginInvoke(new Action(() => Write(L.T("Ready. Lossy CinemaDNG at 3.0:1 is the default; the slider sets the compression. Double-click a clip to preview it."))));
         CheckGpu();
     }
 
@@ -335,7 +336,7 @@ public class ConvertPage : UserControl
     static int Int(string key, int fallback) { int v; return int.TryParse(Settings.Get(key, ""), out v) ? v : fallback; }
     static int Clamp(int v, int lo, int hi) { return Math.Max(lo, Math.Min(hi, v)); }
     double Ratio { get { return ratio.Value / 10.0; } }
-    string RatioString() { return Ratio.ToString("0.0", CultureInfo.InvariantCulture) + ":1"; }
+    string RatioString() { return Ratio.ToString("0.0", L.Culture) + ":1"; }
     public void Write(string s) { Z.Write(log, s); }
 
     // Error relative to sensor noise, measured on Z CAM E2 UHD footage
@@ -356,16 +357,17 @@ public class ConvertPage : UserControl
     // same, matched by eye on Z CAM E2 footage: High ~7:1, Medium ~8 to 9:1, Low ~12:1
     static string H265Grade(double r)
     {
-        return r < 6.95 ? "Better than E2 H.265 High" : r < 7.95 ? "Like E2 H.265 at 200 Mb/s" : r < 9.45 ? "Like E2 H.265 at 130 Mb/s" :
-               r < 11.45 ? "E2 H.265, 60 to 130 Mb/s" : "Like E2 H.265 at 60 Mb/s";
+        if (r < 6.95) return L.T("Better than E2 H.265 High");
+        if (r >= 9.45 && r < 11.45) return L.T("E2 H.265, 60 to 130 Mb/s");
+        return L.F("Like E2 H.265 at {0} Mb/s", r < 7.95 ? 200 : r < 9.45 ? 130 : 60);
     }
 
     // The lowest ProRes level a ratio still matches, matched by eye on Z CAM E2 footage:
     // 4444 XQ 2.6:1, 4444 3.1:1, 422 HQ 4.2:1, 422 4.8:1, LT 5.7:1, Proxy 10:1
     static string ProResGrade(double r)
     {
-        return r <= 2.65 ? "At least ProRes 4444 XQ" : r <= 3.15 ? "At least ProRes 4444" : r <= 4.25 ? "At least ProRes 422 HQ" :
-               r <= 4.85 ? "At least ProRes 422" : r <= 5.75 ? "At least ProRes 422 LT" : r <= 10.05 ? "At least ProRes Proxy" : "Below ProRes Proxy";
+        return r <= 10.05 ? L.F("At least {0}", r <= 2.65 ? "ProRes 4444 XQ" : r <= 3.15 ? "ProRes 4444" : r <= 4.25 ? "ProRes 422 HQ" :
+                                r <= 4.85 ? "ProRes 422" : r <= 5.75 ? "ProRes 422 LT" : "ProRes Proxy") : L.T("Below ProRes Proxy");
     }
 
     // Fixed quality levels, measured over 36 E2 clips: each target (error x sensor noise) is the
@@ -374,7 +376,7 @@ public class ConvertPage : UserControl
     // clips got in fixed-quality mode.
     static readonly string[] LevelShort = { "ProRes 4444 XQ", "ProRes 4444", "ProRes 422 HQ", "ProRes 422", "ProRes 422 LT", "H.265 High", "H.265 Medium", "H.265 Low" };
     static readonly string[] LevelLong = { "ProRes 4444 XQ", "ProRes 4444", "ProRes 422 HQ", "ProRes 422", "ProRes 422 LT",
-                                           "E2 H.265 High, 200 Mb/s", "E2 H.265 Medium, 130 Mb/s", "E2 H.265 Low, 60 Mb/s" };
+                                           L.T("E2 H.265 High, 200 Mb/s"), L.T("E2 H.265 Medium, 130 Mb/s"), L.T("E2 H.265 Low, 60 Mb/s") };
     static readonly double[] LevelTarget = { 0.13, 0.20, 0.42, 0.58, 0.78, 0.97, 1.13, 1.55 };
     static readonly int[] LevelMaxRatio = { 8, 8, 8, 8, 8, 20, 20, 20 };   // H.265 levels may go past 8:1
     static readonly double[] LevelAverage = { 2.55, 2.98, 3.99, 4.58, 5.33, 6.39, 7.75, 10.76 };
@@ -399,27 +401,28 @@ public class ConvertPage : UserControl
         {
             int i = level.Value;
             ratioText.Text = LevelShort[i];
-            sizeText.Text = string.Format(CultureInfo.InvariantCulture, "{0:0.0}:1 average, {1:0.0} MB/frame", LevelAverage[i], 3840 * 2160 * 1.5 / LevelAverage[i] / 1e6);
-            errorText.Text = string.Format(CultureInfo.InvariantCulture, "At most ±{0:0}% of noise", LevelTarget[i] * 100);
-            gradeText.Text = string.Format(CultureInfo.InvariantCulture, "{0:0.0} to {1:0.0}:1 per shot{2}", LevelLow[i], LevelHigh[i], i == 2 ? " (default)" : "");
-            proresText.Text = i < 5 ? "At least " + LevelLong[i] : "Like E2 H.265 at " + LevelLong[i].Substring(LevelLong[i].LastIndexOf(", ") + 2);
+            sizeText.Text = L.F("{0:0.0}:1 average, {1:0.0} MB/frame", LevelAverage[i], 3840 * 2160 * 1.5 / LevelAverage[i] / 1e6);
+            errorText.Text = L.F("At most ±{0:0}% of noise", LevelTarget[i] * 100);
+            gradeText.Text = L.F(i == 2 ? "{0:0.0} to {1:0.0}:1 per shot (default)" : "{0:0.0} to {1:0.0}:1 per shot", LevelLow[i], LevelHigh[i]);
+            proresText.Text = i < 5 ? L.F("At least {0}", LevelLong[i]) : L.F("Like E2 H.265 at {0} Mb/s", new[] { 200, 130, 60 }[i - 5]);
         }
         else if (lossy)
         {
             double e = ErrorAt(Ratio);
-            ratioText.Text = Ratio.ToString("0.0", CultureInfo.InvariantCulture) + " : 1";
-            sizeText.Text = string.Format(CultureInfo.InvariantCulture, "{0:0.0} MB per UHD frame", 3840 * 2160 * 1.5 / Ratio / 1e6);
-            errorText.Text = string.Format(CultureInfo.InvariantCulture, Ratio > 10 ? "Over ±{0:0}% of sensor noise" : "±{0:0}% of sensor noise", e * 100);   // measured up to 10:1
+            ratioText.Text = Ratio.ToString("0.0", L.Culture) + " : 1";
+            sizeText.Text = L.F("{0:0.0} MB per UHD frame", 3840 * 2160 * 1.5 / Ratio / 1e6);
+            errorText.Text = L.F(Ratio > 10 ? "Over ±{0:0}% of sensor noise" : "±{0:0}% of sensor noise", e * 100);   // measured up to 10:1
             proresText.Text = ProResGrade(Ratio);
-            gradeText.Text = (e <= 0.12 ? "Near lossless" : e <= 0.2 ? "Visually lossless" : e <= 0.4 ? "Very high" : e <= 0.65 ? "High, light grading" : H265Grade(Ratio)) + (Math.Abs(Ratio - 3) < 0.05 ? " (default)" : "");
+            string grade = e <= 0.12 ? L.T("Near lossless") : e <= 0.2 ? L.T("Visually lossless") : e <= 0.4 ? L.T("Very high") : e <= 0.65 ? L.T("High, light grading") : H265Grade(Ratio);
+            gradeText.Text = Math.Abs(Ratio - 3) < 0.05 ? L.F("{0} (default)", grade) : grade;
         }
         else
         {
-            ratioText.Text = f == 1 ? "Lossless" : "Uncompressed";
-            sizeText.Text = f == 1 ? "About 6.9 MB per UHD frame" : f == 2 ? "16.6 MB per UHD frame" : "12.4 MB per UHD frame";
-            errorText.Text = "None, every pixel exact";
-            proresText.Text = "Beyond ProRes 4444 XQ";
-            gradeText.Text = f == 1 ? "Lossless" : f == 2 ? "zraw-parser's padded layout" : "Packed 12-bit, no padding";
+            ratioText.Text = L.T(f == 1 ? "Lossless" : "Uncompressed");
+            sizeText.Text = L.T(f == 1 ? "About 6.9 MB per UHD frame" : f == 2 ? "16.6 MB per UHD frame" : "12.4 MB per UHD frame");
+            errorText.Text = L.T("None, every pixel exact");
+            proresText.Text = L.T("Beyond ProRes 4444 XQ");
+            gradeText.Text = L.T(f == 1 ? "Lossless" : f == 2 ? "zraw-parser's padded layout" : "Packed 12-bit, no padding");
         }
         Summary();
     }
@@ -441,7 +444,7 @@ public class ConvertPage : UserControl
                 }
                 p.WaitForExit();
             }
-            catch (Exception ex) { error = "Engine error: " + ex.Message; }
+            catch (Exception ex) { error = L.F("Engine error: {0}", ex.Message); }
             BeginInvoke(new Action(() => ShowGpus(found, error)));
         });
     }
@@ -452,7 +455,7 @@ public class ConvertPage : UserControl
         gpuBoxes.Clear();
         if (found.Count == 0)
         {
-            var l = Z.Text1(error ?? "None found, CPU only", Z.Dim, OW - LW, 22);
+            var l = Z.Text1(error ?? L.T("None found, CPU only"), Z.Dim, OW - LW, 22);
             toolTip.SetToolTip(l, l.Text);
             gpuList.Controls.Add(l);
             return;
@@ -466,7 +469,7 @@ public class ConvertPage : UserControl
             b.Margin = new Padding(0, 0, 0, 4);
             b.Tag = g[2].Length == 0 ? g[0] : null;   // the engine's number, null when unusable
             b.Checked = b.Tag != null && (chosen.Contains(g[1]) || chosen[0].Length == 0 && g == found[0]);
-            toolTip.SetToolTip(b, b.Tag != null ? g[1] : g[1] + " cannot be used: " + g[2]);
+            toolTip.SetToolTip(b, b.Tag != null ? g[1] : L.F("{0} cannot be used: {1}", g[1], g[2]));
             b.CheckedChanged += s => { var on = gpuBoxes.Where(x => x.Checked).Select(x => x.Text).ToList(); Settings.Set("gpus", on.Count > 0 ? string.Join("|", on) : "-"); };
             gpuBoxes.Add(b);
             gpuList.Controls.Add(b);
@@ -497,9 +500,9 @@ public class ConvertPage : UserControl
     // left out, and so are DNG folders (their .mov is the engine's audio sidecar, not a clip).
     public void Add(IEnumerable<string> paths)
     {
-        if (proc != null) { Write("Wait for the current conversion to finish before adding clips."); return; }
+        if (proc != null) { Write(L.T("Wait for the current conversion to finish before adding clips.")); return; }
         var input = paths.ToList();
-        status.Text = "Looking for clips...";
+        status.Text = L.T("Looking for clips...");
         Task.Run(() =>
         {
             var files = new List<string>();
@@ -536,7 +539,7 @@ public class ConvertPage : UserControl
             var info = infos[i];
             var c = new Clip { Path = files[i], Info = info, T = new Thumb { Path = files[i], Raw = info.TrueRaw || info.Hevc } };
             string length = info.Fps > 0 ? TimeSpan.FromSeconds(info.Frames / info.Fps).ToString(@"m\:ss") : "";
-            c.Row = grid.Rows[grid.Rows.Add(Path.GetFileName(c.Path), info.TrueRaw ? "RAW \u2192 DNG" : "HEVC \u2192 MOV", info.Frames.ToString(), length, "Ready", "")];
+            c.Row = grid.Rows[grid.Rows.Add(Path.GetFileName(c.Path), info.TrueRaw ? "RAW \u2192 DNG" : "HEVC \u2192 MOV", info.Frames.ToString(), length, L.T("Ready"), "")];
             if (info.Hevc) hevc++;
             c.Row.Cells[0].ToolTipText = c.Path;
             c.Row.Tag = c.T;
@@ -545,11 +548,12 @@ public class ConvertPage : UserControl
         }
         grid.ClearSelection();
         thumbs.Refill();
-        if (other > 0) Write("Left out " + other + " clip(s) that are not ZRAW (H.265 and others). The Tagger tab shows every clip.");
-        if (unknown > 0) Write("Left out " + unknown + " HEVC ZRAW clip(s) of a variant this version does not recognize.");
-        if (added == 0) { if (other + unknown == 0) Write("No new ZRAW clips found."); Summary(); return; }
+        if (other > 0) Write(L.F("Left out {0} {0:clip|clips} that {0:is|are} not ZRAW (H.265 and others). The Tagger tab shows every clip.", other));
+        if (unknown > 0) Write(L.F("Left out {0} HEVC ZRAW {0:clip|clips} of a variant this version does not recognize.", unknown));
+        if (added == 0) { if (other + unknown == 0) Write(L.T("No new ZRAW clips found.")); Summary(); return; }
         if (output.Text.Trim().Length == 0) output.Text = Path.Combine(Path.GetPathRoot(clips[clips.Count - added].Path), "zraw-decoded");   // default: a zraw-decoded folder at the root of the clips' drive
-        Write("Added " + added + " ZRAW clip(s)" + (hevc > 0 ? ": " + (added - hevc) + " RAW (converted to DNG) and " + hevc + " HEVC (copied to an H.265 .mov)." : "."));
+        Write(hevc > 0 ? L.F("Added {0} ZRAW {0:clip|clips}: {1} RAW (converted to DNG) and {2} HEVC (copied to an H.265 .mov).", added, added - hevc, hevc)
+                       : L.F("Added {0} ZRAW {0:clip|clips}.", added));
         Summary();
     }
 
@@ -557,22 +561,22 @@ public class ConvertPage : UserControl
     {
         if (proc != null) return;
         var todo = clips.Where(c => c.Info.Convertible).ToList();
-        if (todo.Count == 0) { status.Text = "Drop ZRAW clips or folders anywhere in this window."; eta.Text = ""; return; }
+        if (todo.Count == 0) { status.Text = L.T("Drop ZRAW clips or folders anywhere in this window."); eta.Text = ""; return; }
         int frames = todo.Sum(c => c.Info.Frames), hevc = todo.Count(c => c.Info.Hevc);
         double perFrame = format.SelectedIndex == 0 ? 3840 * 2160 * 1.5 / AverageRatio : format.SelectedIndex == 1 ? 6.9e6 : format.SelectedIndex == 2 ? 16.6e6 : 12.4e6;
         double bytes = todo.Where(c => c.Info.TrueRaw).Sum(c => c.Info.Frames * perFrame) + todo.Where(c => c.Info.Hevc).Sum(c => (double)FileSize(c.Path));   // HEVC: about the clip's own size
-        status.Text = string.Format(CultureInfo.InvariantCulture, "{0} clip(s){1}, {2:N0} frames, about {3:0.0} GB of output.",
+        status.Text = L.F("{0} {0:clip|clips}{1}, {2:N0} {2:frame|frames}, about {3:0.0} GB of output.",
             todo.Count, hevc > 0 ? " (" + (todo.Count - hevc) + " RAW, " + hevc + " HEVC)" : "", frames, bytes / 1e9);
         double fps = LastFps();
-        eta.Text = fps > 0 ? "About " + Hms(frames / fps) + " at your last speed" : "";
-        toolTip.SetToolTip(eta, fps > 0 ? string.Format(CultureInfo.InvariantCulture, "Your last full run with these settings averaged {0:0.0} fps", fps) : "");
+        eta.Text = fps > 0 ? L.F("About {0} at your last speed", Hms(frames / fps)) : "";
+        toolTip.SetToolTip(eta, fps > 0 ? L.F("Your last full run with these settings averaged {0:0.0} fps", fps) : "");
     }
 
     void Running(bool on)
     {
         start.Enabled = !on;
         stop.Enabled = pause.Enabled = on;
-        if (!on) { paused = false; pause.Text = "Pause"; }
+        if (!on) { paused = false; pause.Text = L.T("Pause"); }
         add.Enabled = addFolder.Enabled = remove.Enabled = clear.Enabled = browse.Enabled = deleteSource.Enabled = folderIcons.Enabled = skipConverted.Enabled = !on;
         format.Enabled = scale.Enabled = denoise.Enabled = colorMatrix.Enabled = threads.Enabled = output.Enabled = gpu.Enabled = !on;
         ratio.Enabled = level.Enabled = rateMode.Enabled = !on && format.SelectedIndex == 0;
@@ -582,12 +586,12 @@ public class ConvertPage : UserControl
     void Start()
     {
         var todo = clips.Where(c => c.Info.Convertible).ToList();
-        if (todo.Count == 0) { Write("Nothing to convert: add ZRAW clips first."); return; }
+        if (todo.Count == 0) { Write(L.T("Nothing to convert: add ZRAW clips first.")); return; }
         string outDir = output.Text.Trim();
-        if (outDir.Length == 0) { Write("ERROR: choose an output folder."); return; }
-        try { Directory.CreateDirectory(outDir); } catch (Exception ex) { Write("ERROR: cannot create " + outDir + ": " + ex.Message); return; }
+        if (outDir.Length == 0) { Write(L.T("ERROR: choose an output folder.")); return; }
+        try { Directory.CreateDirectory(outDir); } catch (Exception ex) { Write(L.F("ERROR: cannot create {0}: {1}", outDir, ex.Message)); return; }
         string engine;
-        try { engine = Embedded.Engine(); } catch (Exception ex) { Write("ERROR: " + ex.Message); return; }
+        try { engine = Embedded.Engine(); } catch (Exception ex) { Write(L.F("ERROR: {0}", ex.Message)); return; }
 
         // Never replace an earlier conversion without asking: the engine overwrites <output>\<clip name>\
         var existing = todo.Where(c =>
@@ -599,21 +603,21 @@ public class ConvertPage : UserControl
         {
             // With "Skip already converted ZRAW clips" ticked, skip them without asking
             var answer = skipConverted.Checked ? DialogResult.No : MessageBox.Show(this,
-                existing.Count + " of these clips were already converted into " + outDir + ":\n\n" + string.Join("\n", existing.Take(8).Select(c => Path.GetFileNameWithoutExtension(c.Path))) + (existing.Count > 8 ? "\n..." : "") +
-                "\n\nYes: overwrite them.\nNo: skip those clips and convert the rest.\nCancel: do nothing.",
-                "ZRAW Studio: existing conversions", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                L.F("{0} of these clips {0:was|were} already converted into {1}:\n\n{2}\n\nYes: overwrite them.\nNo: skip those clips and convert the rest.\nCancel: do nothing.",
+                    existing.Count, outDir, string.Join("\n", existing.Take(8).Select(c => Path.GetFileNameWithoutExtension(c.Path))) + (existing.Count > 8 ? "\n..." : "")),
+                L.T("ZRAW Studio: existing conversions"), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
             if (answer == DialogResult.Cancel) return;
             if (answer == DialogResult.No)
             {
-                foreach (var c in existing) Set(c, "Skipped: already converted", Z.Dim, "");
+                foreach (var c in existing) Set(c, L.T("Skipped: already converted"), Z.Dim, "");
                 todo = todo.Except(existing).ToList();
-                if (skipConverted.Checked) Write("Skipping " + existing.Count + " clip(s) already converted into " + outDir + ".");
-                if (todo.Count == 0) { Write("Nothing to convert: every clip was already converted into " + outDir + "."); return; }
+                if (skipConverted.Checked) Write(L.F("Skipping {0} {0:clip|clips} already converted into {1}.", existing.Count, outDir));
+                if (todo.Count == 0) { Write(L.F("Nothing to convert: every clip was already converted into {0}.", outDir)); return; }
             }
         }
 
         run = todo;
-        foreach (var c in todo) { c.Done = 0; c.Finished = false; c.Ok = c.IconDone = false; c.OutDir = null; c.FolderIco = null; Set(c, "Waiting", Z.Text, ""); }
+        foreach (var c in todo) { c.Done = 0; c.Finished = false; c.Ok = c.IconDone = false; c.OutDir = null; c.FolderIco = null; Set(c, L.T("Waiting"), Z.Text, ""); }
         totalFrames = todo.Sum(c => c.Info.Frames);
         if (folderIcons.Checked)   // render every clip's icon now, in conversion order, before the engine can delete a source
         {
@@ -645,10 +649,11 @@ public class ConvertPage : UserControl
         overall.Value = 0;
         Running(true);
         speed.Clear();
-        Write("Converting " + todo.Count + " clip(s) to " + outDir + " as " + format.Text +
-              (FixedQuality ? ", fixed quality " + LevelLong[level.Value] : format.SelectedIndex == 0 ? " " + RatioString() : "") +
-              (denoise.SelectedIndex > 0 ? ", denoise " + denoise.Text.ToLowerInvariant() : "") + ".");
-        if (deleteSource.Checked) Write("Each source clip goes to the Recycle Bin once it converts with no errors and its new files check out on disk.");
+        // "Converting 3 clips to D:\out as Lossy CinemaDNG (Resolve) 3.0:1, denoise light."
+        Write(L.F("Converting {0} {0:clip|clips} to {1} as {2}", todo.Count, outDir, format.Text) +
+              (FixedQuality ? L.F(", fixed quality {0}", LevelLong[level.Value]) : format.SelectedIndex == 0 ? " " + RatioString() : "") +
+              (denoise.SelectedIndex > 0 ? L.T(denoise.SelectedIndex == 1 ? ", denoise light" : ", denoise strong") : "") + ".");
+        if (deleteSource.Checked) Write(L.T("Each source clip goes to the Recycle Bin once it converts with no errors and its new files check out on disk."));
         Settings.Save();
         NextBatch(engine, outDir);
     }
@@ -703,8 +708,8 @@ public class ConvertPage : UserControl
                 int code = proc.ExitCode;
                 proc.Dispose();
                 proc = null;
-                if (!stopping && code != 0 && code != 1) Write("ERROR: the engine stopped with code " + code + ".");
-                if (current != null && !current.Finished) { Set(current, stopping ? "Stopped, folder is incomplete" : "Failed", Z.RedHover, null); current = null; }
+                if (!stopping && code != 0 && code != 1) Write(L.F("ERROR: the engine stopped with code {0}.", code));
+                if (current != null && !current.Finished) { Set(current, L.T(stopping ? "Stopped, folder is incomplete" : "Failed"), Z.RedHover, null); current = null; }
                 NextBatch(engine, outDir);
             }));
             proc.Start();
@@ -712,7 +717,7 @@ public class ConvertPage : UserControl
             proc.BeginErrorReadLine();
             proc.BeginOutputReadLine();
         }
-        catch (Exception ex) { Write("ERROR: could not start the engine: " + ex.Message); proc = null; Finish(); }
+        catch (Exception ex) { Write(L.F("ERROR: could not start the engine: {0}", ex.Message)); proc = null; Finish(); }
     }
 
     Clip Find(string path) { return clips.FirstOrDefault(c => c.Path.Equals(path, StringComparison.OrdinalIgnoreCase)); }
@@ -724,7 +729,7 @@ public class ConvertPage : UserControl
         {
             case "@clip":
                 current = Find(f[1]);
-                if (current != null) { Set(current, "Converting", Color.White, "0%"); if (f.Length > 3) current.OutDir = f[3]; }
+                if (current != null) { Set(current, L.T("Converting"), Color.White, "0%"); if (f.Length > 3) current.OutDir = f[3]; }
                 break;
             case "@progress":
                 if (current == null) break;
@@ -737,7 +742,8 @@ public class ConvertPage : UserControl
                 break;
             case "@skip":
                 var sk = Find(f[1]);
-                if (sk != null) { sk.Finished = true; Set(sk, "Skipped: " + f[2], Z.Dim, ""); }
+                // The engine's reasons: "not a ZRAW clip", "unrecognized HEVC ZRAW variant"
+                if (sk != null) { sk.Finished = true; Set(sk, L.F("Skipped: {0}", L.T(f[2])), Z.Dim, ""); }
                 break;
             case "@done":
                 var d = Find(f[1]);
@@ -745,8 +751,8 @@ public class ConvertPage : UserControl
                 d.Finished = true;
                 d.Ok = f[2] == "1";
                 TryFolderIcon(d);
-                if (f[2] == "1") Set(d, string.Format(CultureInfo.InvariantCulture, "Done: {0:0}s, {1:0} fps", double.Parse(f[4], CultureInfo.InvariantCulture), double.Parse(f[5], CultureInfo.InvariantCulture)), Z.Good, "100%");
-                else Set(d, "Failed: " + f[3] + " frame(s) did not convert", Z.RedHover, null);
+                if (f[2] == "1") Set(d, L.F("Done: {0:0}s, {1:0} fps", double.Parse(f[4], CultureInfo.InvariantCulture), double.Parse(f[5], CultureInfo.InvariantCulture)), Z.Good, "100%");
+                else Set(d, L.F("Failed: {0} {0:frame|frames} did not convert", int.Parse(f[3])), Z.RedHover, null);
                 if (d == current) current = null;
                 Overall(0);
                 break;
@@ -762,7 +768,7 @@ public class ConvertPage : UserControl
         if (c.IconDone || !c.Ok || c.FolderIco == null || c.OutDir == null) return;
         c.IconDone = true;
         try { FolderIcon.Apply(c.OutDir, c.FolderIco); }
-        catch (Exception ex) { Write("WARNING: could not set the folder icon for " + Path.GetFileName(c.OutDir) + ": " + ex.Message); }
+        catch (Exception ex) { Write(L.F("WARNING: could not set the folder icon for {0}: {1}", Path.GetFileName(c.OutDir), ex.Message)); }
     }
 
     void Overall(double fps)
@@ -777,12 +783,12 @@ public class ConvertPage : UserControl
         double span = (now - speed.Peek().Key).TotalSeconds;
         double rate = span >= 2 ? (done - speed.Peek().Value) / span : fps;
         int clipNo = run.Count(c => c.Finished) + (current != null ? 1 : 0);
-        status.Text = string.Format(CultureInfo.InvariantCulture, "Clip {0} of {1}     {2:N0} / {3:N0} frames     {4:0.0} fps",
+        status.Text = L.F("Clip {0} of {1}     {2:N0} / {3:N0} {3:frame|frames}     {4:0.0} fps",
             clipNo, run.Count, done, totalFrames, rate > 0 ? rate : fps);
         if (rate > 0)
         {
             var left = TimeSpan.FromSeconds((totalFrames - done) / rate);
-            eta.Text = "Queue: " + Hms(left.TotalSeconds) + " left, done about " + (now + left).ToShortTimeString();
+            eta.Text = L.F("Queue: {0} left, done about {1}", Hms(left.TotalSeconds), (now + left).ToShortTimeString());
         }
     }
 
@@ -791,7 +797,7 @@ public class ConvertPage : UserControl
         c.Row.Cells[4].Value = text;
         c.Row.Cells[4].Style.ForeColor = color;
         if (progress != null) c.Row.Cells[5].Value = progress;
-        c.T.Progress = text == "Converting" ? 0 : -1;
+        c.T.Progress = text == L.T("Converting") ? 0 : -1;
         thumbs.Invalidate();
     }
 
@@ -803,19 +809,19 @@ public class ConvertPage : UserControl
         {
             NtSuspendProcess(proc.Handle);
             pausedAt = DateTime.Now;
-            pause.Text = "Resume";
-            status.Text = "Paused. The CPU and GPU are free until you resume.";
+            pause.Text = L.T("Resume");
+            status.Text = L.T("Paused. The CPU and GPU are free until you resume.");
             eta.Text = "";
-            Write("Paused.");
+            Write(L.T("Paused."));
         }
         else
         {
             NtResumeProcess(proc.Handle);
             pausedFor += DateTime.Now - pausedAt;
             speed.Clear();   // the speed shown restarts from now, not averaged over the pause
-            pause.Text = "Pause";
-            status.Text = "Resuming...";
-            Write("Resumed.");
+            pause.Text = L.T("Pause");
+            status.Text = L.T("Resuming...");
+            Write(L.T("Resumed."));
         }
     }
 
@@ -825,27 +831,27 @@ public class ConvertPage : UserControl
         if (paused) pausedFor += DateTime.Now - pausedAt;   // a suspended engine can still be killed
         stopping = true;
         try { proc.Kill(); } catch { }
-        Write("Stopped. The clip that was converting has an incomplete folder.");
+        Write(L.T("Stopped. The clip that was converting has an incomplete folder."));
     }
 
     void Finish()
     {
         Running(false);
         var raw = run;
-        int ok = raw.Count(c => c.Finished && c.Row.Cells[4].Value.ToString().StartsWith("Done"));
+        int ok = raw.Count(c => c.Finished && c.Ok);
         double secs = (DateTime.Now - startedAt - pausedFor).TotalSeconds;
         if (!stopping) overall.Value = 1000;
         int frames = raw.Sum(c => c.Finished ? c.Info.Frames : c.Done);
         if (!stopping && ok == raw.Count && secs > 5) Settings.Set(FpsKey(), (frames / secs).ToString("0.0", CultureInfo.InvariantCulture));
-        eta.Text = stopping ? "" : "Took " + Hms(secs);
-        Write(string.Format(CultureInfo.InvariantCulture, "{0}: {1} of {2} clip(s) converted in {3}.", stopping ? "Stopped" : "Finished", ok, raw.Count, TimeSpan.FromSeconds(secs).ToString(@"h\:mm\:ss")));
-        status.Text = stopping ? "Stopped." : ok == raw.Count ? "All done. Drop the folders into Resolve." : "Finished with problems. See the list and the log.";
+        eta.Text = stopping ? "" : L.F("Took {0}", Hms(secs));
+        Write(L.F(stopping ? "Stopped: {0} of {1} {1:clip|clips} converted in {2}." : "Finished: {0} of {1} {1:clip|clips} converted in {2}.", ok, raw.Count, Hms(secs)));
+        status.Text = L.T(stopping ? "Stopped." : ok == raw.Count ? "All done. Drop the folders into Resolve." : "Finished with problems. See the list and the log.");
     }
 
     public bool ConfirmClose()
     {
         if (proc == null) return true;
-        if (MessageBox.Show(this, "A conversion is running. Stop it and quit?", "ZRAW Studio", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return false;
+        if (MessageBox.Show(this, L.T("A conversion is running. Stop it and quit?"), "ZRAW Studio", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return false;
         Stop();
         return true;
     }
@@ -960,7 +966,7 @@ static class FolderIcon
         var fcs = new SHFOLDERCUSTOMSETTINGS { dwMask = 0x10 /* FCSM_ICONFILE */, pszIconFile = name, iIconIndex = 0 };
         fcs.dwSize = (uint)Marshal.SizeOf(fcs);
         int hr = SHGetSetFolderCustomSettings(ref fcs, dir, 0x2 /* FCS_FORCEWRITE */);
-        if (hr != 0) throw new IOException("Windows refused the folder icon (0x" + hr.ToString("X8") + ")");
+        if (hr != 0) throw new IOException(L.F("Windows refused the folder icon (0x{0})", hr.ToString("X8")));
         const uint pathFlush = 0x0005 /* SHCNF_PATHW */ | 0x1000 /* SHCNF_FLUSH: deliver now, not when Explorer gets around to it */;
         SHChangeNotify(0x00002000 /* SHCNE_UPDATEITEM */, pathFlush, dir, IntPtr.Zero);
         string parent = Path.GetDirectoryName(dir.TrimEnd('\\'));

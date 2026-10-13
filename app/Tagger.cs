@@ -13,6 +13,8 @@ public class Clip { public string Path, Name, Kind, Status; }  // Name: path rel
 public static class Tagger
 {
     public const string Prefix = "ZRAW_";
+    // Clip.Status values, in English; the Tagger tab shows them translated
+    public const string Done = "tagged", ToRename = "to rename", NotZraw = "WARNING: has a ZRAW_ name but is not ZRAW";
 
     public static bool Tagged(string name) { return name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase); }
 
@@ -26,7 +28,7 @@ public static class Tagger
         {
             var c = new Clip { Path = p, Name = p.Substring(root.Length), Kind = Classify(p) };
             bool z = c.Kind == "ZRAW", t = Tagged(Path.GetFileName(p));
-            c.Status = z ? (t ? "tagged" : "to rename") : (t ? "WARNING: has ZRAW_ name but is not ZRAW" : "");
+            c.Status = z ? (t ? Done : ToRename) : (t ? NotZraw : "");
             clips.Add(c);
         }
         return clips;
@@ -64,25 +66,26 @@ public static class Tagger
     static bool Move(string from, string to, Action<string> log)
     {
         string a = Path.GetFileName(from), b = Path.GetFileName(to);
-        if (File.Exists(to)) { log("SKIP " + a + ": " + b + " already exists"); return false; }
+        if (File.Exists(to)) { log(L.F("SKIP {0}: {1} already exists", a, b)); return false; }
         try { File.Move(from, to); log(a + "  ->  " + b); return true; }
-        catch (Exception e) { log("FAILED " + a + ": " + e.Message); return false; }
+        catch (Exception e) { log(L.F("FAILED {0}: {1}", a, e.Message)); return false; }
     }
 
+    // "ZRAW", "H.265" and "H.264" stay as they are; the rest is shown as is, so it is translated here
     public static string Classify(string path)
     {
         try
         {
             var moov = ReadMoov(path);
-            if (moov == null) return "unreadable";
+            if (moov == null) return L.T("unreadable");
             var codecs = new List<string>();
             Walk(moov, 0, moov.Length, codecs);
             if (codecs.Contains("zraw")) return "ZRAW";
             if (codecs.Contains("hvc1") || codecs.Contains("hev1")) return "H.265";
             if (codecs.Contains("avc1")) return "H.264";
-            return "other (" + string.Join(",", codecs) + ")";
+            return L.F("other ({0})", string.Join(",", codecs));
         }
-        catch (Exception e) { return "unreadable (" + e.Message + ")"; }
+        catch (Exception e) { return L.F("unreadable ({0})", e.Message); }
     }
 
     // Walks top-level atoms by seeking (no data read) until moov, then loads just moov.
