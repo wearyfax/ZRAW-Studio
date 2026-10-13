@@ -15,10 +15,14 @@
 #include <cstring>
 #include <string>
 #include <vector>
-#include <intrin.h>
+#include "portable.hpp"
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#else
+#include <cstdio>
+#endif
 #include "zraw.hpp"
 #include "camera_color.hpp"
 #include "bitwriter.hpp"
@@ -705,13 +709,23 @@ namespace lossy
                 else memcpy(p + 8, entries[i].data.data(), entries[i].data.size());
             }   // next-IFD offset stays 0
 
+#ifdef _WIN32
             HANDLE f = CreateFileA(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (f == INVALID_HANDLE_VALUE) { err = "cannot create " + path; return false; }
             auto put = [&](const void* p, size_t sz) { DWORD done = 0; return sz == 0 || (WriteFile(f, p, (DWORD)sz, &done, nullptr) && done == sz); };
+#else
+            FILE* f = fopen(path.c_str(), "wb");
+            if (!f) { err = "cannot create " + path; return false; }
+            auto put = [&](const void* p, size_t sz) { return sz == 0 || fwrite(p, 1, sz, f) == sz; };
+#endif
             bool ok = put(head.data(), head.size());
             uint64_t total = head.size();
             for (int t = 0; ok && t < ntiles; ++t) { ok = put(tiles[t].data(), tiles[t].size()); total += tiles[t].size(); }
+#ifdef _WIN32
             CloseHandle(f);
+#else
+            if (fclose(f)) ok = false;
+#endif
             if (!ok) { err = "write failed: " + path; return false; }
             if (written) *written = total;
             return true;

@@ -23,6 +23,9 @@
 //
 //   zrawdng hash <clip.MOV> <out.txt> [threads] [first] [count]
 //       Decodes frames and writes one fingerprint per frame, same format as zraw-ref, for verification.
+//
+//   The Linux build (build.sh) runs on the CPU only and has no play, gpuinfo, --gpus, --denoise or
+//   --delete-originals.
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -31,11 +34,20 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
+static const char* const kNullFile = "NUL";
+#else
+#include <fcntl.h>
+#include <strings.h>
+#include <unistd.h>
+#define _stricmp strcasecmp
+static const char* const kNullFile = "/dev/null";
+#endif
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -43,16 +55,29 @@
 #include "movparse.hpp"
 #include "zraw.hpp"
 #include "dng.hpp"
+#include "lossy.hpp"
+#include "hevczraw.hpp"
+#include "delete_original.hpp"
+#ifdef _WIN32   // playback and the GPU encoder and denoise
 #include "preview.hpp"
 #include "player.hpp"
-#include "delete_original.hpp"
-#include "lossy.hpp"
 #include "gpu_lossy.hpp"
 #include "gpu_denoise.hpp"
-#include "hevczraw.hpp"
+#else
+namespace gpu_denoise { struct Store; struct Merger; }   // GPU denoise is Windows only; on Linux these stay null
+#endif
 
 namespace fs = std::filesystem;
 using clk = std::chrono::steady_clock;
+
+// zrawdng convert's options; the Windows build adds the GPU, denoise and Recycle Bin ones
+static const char kConvertUsage[] =
+    "zrawdng convert <clip.MOV | folder>... -o <output folder> [--lossy ratio | --quality x [--min-ratio 2] [--max-ratio 8] | --lossless | --uncompressed [--pack]]"
+    " [--scale half|quarter] [-j threads] [--zcam-dng-color | --camera-color | --videosuite-color]"
+#ifdef _WIN32
+    " [--cpu] [--denoise [light|strong]] [--delete-originals [--permanent]]"
+#endif
+    "\n";
 
 static double since(clk::time_point t) { return std::chrono::duration<double>(clk::now() - t).count(); }
 
@@ -67,8 +92,8 @@ static uint64_t fnv1a(const void* p, size_t n)
 // TinyMovFileLibrary prints every atom to stdout; zrawdng's own messages go to stderr.
 static void silence_stdout()
 {
-    int nul = _open("NUL", _O_WRONLY);
-    if (nul >= 0) { fflush(stdout); _dup2(nul, 1); _close(nul); }
+    int nul = open(kNullFile, O_WRONLY);
+    if (nul >= 0) { fflush(stdout); dup2(nul, 1); close(nul); }
 }
 
 static bool is_true_raw(const ZrawTrack& z) { return z.track_index >= 0 && z.version == 0x12EA78D2; }
@@ -80,6 +105,7 @@ static bool read_frame(std::ifstream& f, const ZrawTrack& z, int i, std::vector<
     return (bool)f.read((char*)data.data(), (std::streamsize)z.sizes[i]);
 }
 
+#ifdef _WIN32
 // Sequential frame reader using ReadFile directly; frames are stored back to back, so with the
 // sequential-scan hint Windows reads ahead and the drive stays busy.
 class FrameReader
@@ -100,6 +126,22 @@ public:
         return ReadFile(h, data.data(), (DWORD)size, &got, nullptr) && got == size;
     }
 };
+#else
+// The same with pread, and the sequential hint so Linux reads ahead
+class FrameReader
+{
+    PosixFile f;
+public:
+    explicit FrameReader(const fs::path& p) : f(p) { f.sequential(); }
+    bool read(uint64_t offset, uint64_t size, std::vector<uint8_t>& data)
+    {
+        if (!f.ok()) return false;
+        data.resize((size_t)size + 16);
+        memset(data.data() + size, 0, 16);
+        return f.read_at(offset, data.data(), (size_t)size);
+    }
+};
+#endif
 
 // Small blocking queue between the disk reader and the workers.
 template <class T> class Queue
@@ -123,10 +165,12 @@ struct Options { fs::path out; DngStorage storage = DngStorage::LosslessJpeg; bo
                  double quality = 0;    // > 0: lossy at fixed quality, coding error at most this x the sensor noise
                  double min_ratio = 2, max_ratio = 8;   // fixed quality: the ratio caps per frame
                  bool denoise = false;  // temporal raw denoise on the GPU before encoding (gpu_denoise.hpp)
+                 bool gpu = true;       // lossy DCT and rate control on the GPU when one is available (gpu_lossy.hpp)
+#ifdef _WIN32
                  gpu_denoise::Settings dn;                // its strength (--denoise light | strong, --denoise-settings r,t,s)
                  gpu_lossy::Device* dn_device = nullptr;  // the GPU it runs on (filled by cmd_convert)
-                 bool gpu = true;       // lossy DCT and rate control on the GPU when one is available (gpu_lossy.hpp)
                  std::vector<gpu_lossy::Device*> gpus;   // the GPUs in use; workers take turns (filled by cmd_convert)
+#endif
                  ColorSource color = ColorSource::Ours;    // ZRAW Studio's fitted matrices; the alternatives are --zcam-dng-color (alias --zraw-parser-color), --camera-color and --videosuite-color (camera_color.hpp)
                  bool exact = false;          // --zraw-parser-exact: zraw-parser's WhiteLevel too, for byte comparisons
                  bool progress = false; };   // --progress: tab-separated "@" lines on stderr for GUIs (see cmd_convert)
@@ -190,7 +234,11 @@ static bool convert_hevc_clip(const fs::path& clip, TinyMovFile& mov, const Zraw
     std::string err;
     bool ok = hz.Open(clip, err);
     if (!ok) fprintf(stderr, "%s: %s\n", clip.filename().string().c_str(), err.c_str());
+#ifdef _WIN32
     FILE* f = ok ? _wfopen(o.no_write ? L"NUL" : out.wstring().c_str(), L"wb") : nullptr;   // --no-write: stream everything, keep nothing
+#else
+    FILE* f = ok ? fopen(o.no_write ? kNullFile : out.c_str(), "wb") : nullptr;
+#endif
     ok = f != nullptr;
     std::vector<uint8_t> buf(8u << 20);
     for (uint64_t pos = 0; ok && pos < hz.Size();)
@@ -235,6 +283,7 @@ static double clip_iso(const fs::path& clip)
     return 0;
 }
 
+#ifdef _WIN32
 // Denoise: the frames merged into frame k (k - radius .. k + radius, those inside the clip)
 static std::vector<int> dn_window(int k, int count, int r)
 {
@@ -285,6 +334,7 @@ static bool denoise_frame_standalone(const fs::path& clip, const ZrawTrack& z, i
     const double black = (fr.black[0] + fr.black[1] + fr.black[2] + fr.black[3]) / 4.0;
     return mg.Run(slots, offs, refpos, black, nz.a, nz.floor2, o.dn, out.data());
 }
+#endif
 
 // Fixed quality: the clip's quantization scale. The CPU measures frames spread through the clip.
 // The whole clip uses the strictest scale that keeps every sampled frame within o.quality x the
@@ -319,8 +369,10 @@ static double quality_scale(const fs::path& clip, const ZrawTrack& z, int count,
                 std::string err;
                 if (st)
                 {
+#ifdef _WIN32
                     std::lock_guard<std::mutex> l(dn_m);
                     if (!denoise_frame_standalone(clip, z, count, k, o, nz, *st, *mg, cfa, fr, window)) continue;
+#endif
                 }
                 else
                 {
@@ -365,10 +417,11 @@ static bool convert_clip(const fs::path& clip, const Options& o)
     // the clip's; every frame is checked against them)
     // Kept across clips of the same frame size, since compiling the shaders and reserving about 1 GB
     // of GPU buffers costs about a second per clip. Clips convert one at a time.
-    static std::unique_ptr<gpu_denoise::Store> st_cache;
-    static std::vector<std::unique_ptr<gpu_denoise::Merger>> mergers_cache;
     gpu_denoise::Store* st = nullptr;
     std::vector<gpu_denoise::Merger*> mergers;
+#ifdef _WIN32
+    static std::unique_ptr<gpu_denoise::Store> st_cache;
+    static std::vector<std::unique_ptr<gpu_denoise::Merger>> mergers_cache;
     const int dn_r = o.dn.radius;
     const lossy::Noise dn_noise = lossy::E2Noise(clip_iso(clip));
     if (o.denoise && o.dn_device && count > 0)
@@ -405,6 +458,7 @@ static bool convert_clip(const fs::path& clip, const Options& o)
         }
         else fprintf(stderr, "denoise: %d frames per merge (temporal %.1f, spatial %.2f), ISO %.0f noise model\n", 2 * dn_r + 1, o.dn.temporal, o.dn.spatial, clip_iso(clip));
     }
+#endif
     const bool dn = st != nullptr;
     const double qscale = o.lossy > 0 && o.quality > 0 ? quality_scale(clip, z, count, o, st, dn ? mergers[0] : nullptr) : 0;
 
@@ -443,6 +497,7 @@ static bool convert_clip(const fs::path& clip, const Options& o)
         queue.close();
     });
 
+#ifdef _WIN32
     // Denoise: each frame is decoded once, by whichever worker pops it, and put in a GPU slot; the
     // worker that completes the last frame of some frame's window merges that frame and writes it.
     // Nobody waits for a neighbor, so this can't deadlock; a frame and its slot are freed when the
@@ -578,6 +633,7 @@ static bool convert_clip(const fs::path& clip, const Options& o)
             for (int k : claims) process(k);
         }
     };
+#endif
 
     std::vector<std::thread> workers;
     for (int t = 0; t < o.threads; ++t)
@@ -585,6 +641,7 @@ static bool convert_clip(const fs::path& clip, const Options& o)
             Job j;
             std::vector<uint16_t> cfa;
             lossy::RateState rate;   // per worker: the quantization scale carries over between its frames
+#ifdef _WIN32
             // Per-worker GPU buffers. With several GPUs the workers take turns, and since every worker pulls
             // from the same queue, a slower GPU ends up with fewer frames.
             // Kept across clips (one per worker index), since creating 16 of them costs about half a second per clip.
@@ -598,6 +655,9 @@ static bool convert_clip(const fs::path& clip, const Options& o)
                 if (!pool[t]) pool[t] = std::make_unique<gpu_lossy::Backend>(*o.gpus[t % o.gpus.size()]);
                 gpu = pool[t].get();
             }
+#else
+            lossy::Backend* gpu = nullptr;   // lossy on the CPU
+#endif
             // Writes frame `index` in the chosen format
             auto write_frame = [&](int index, ZrawFrame& fr, std::vector<uint16_t>& img, std::string& err) -> bool {
                 if (o.no_write && o.lossy <= 0)
@@ -607,12 +667,14 @@ static bool convert_clip(const fs::path& clip, const Options& o)
                     return true;
                 }
                 const std::string path = dngs[index].string();
-                if (o.lossy > 0) return write_lossy(o.no_write ? "NUL" : path, fr, img, o, z, rate, err, &written[index], gpu, qscale);
+                if (o.lossy > 0) return write_lossy(o.no_write ? kNullFile : path, fr, img, o, z, rate, err, &written[index], gpu, qscale);
                 DngColor color;
                 const bool own = FrameDngColor(fr, o.color, color);
                 return WriteDng(path, fr, img, o.storage, o.scale, err, &written[index], own ? &color : nullptr, o.exact);
             };
+#ifdef _WIN32
             if (dn) { denoise_worker(write_frame); return; }
+#endif
             for (;;)
             {
                 // The previous frame is fully written (fr points into its buffer), so the buffer goes back
@@ -697,6 +759,7 @@ static int cmd_convert(int argc, char** argv)
         else if (a == "--cpu") o.gpu = false;   // lossy: keep the DCT and rate control on the CPU
         else if (a == "--curve" && i + 1 < argc) { if (!strcmp(argv[++i], "bmd")) lossy::UseBlackmagicCurve(); }   // lossy: Blackmagic's log curve instead of the noise-matched one
         else if (a == "--quality" && i + 1 < argc) { o.quality = atof(argv[++i]); lossy_given = true; }   // fixed quality, e.g. 0.25 (x sensor noise)
+#ifdef _WIN32
         else if (a == "--denoise")   // temporal raw denoise on the GPU: light (the default) or strong
         {
             o.denoise = true;
@@ -709,6 +772,10 @@ static int cmd_convert(int argc, char** argv)
             if (sscanf(argv[++i], "%d,%f,%f", &o.dn.radius, &o.dn.temporal, &o.dn.spatial) != 3 || o.dn.radius < 1 || o.dn.radius > 3)
                 { fprintf(stderr, "--denoise-settings expects radius,temporal,spatial, with radius 1 to 3\n"); return 2; }
         }
+#else
+        else if (a == "--denoise" || a == "--denoise-settings" || a == "--gpus" || a == "--delete-originals" || a == "--permanent")
+            { fprintf(stderr, "%s works only on Windows\n", a.c_str()); return 2; }
+#endif
         else if (a == "--min-ratio" && i + 1 < argc) o.min_ratio = atof(argv[++i]);   // fixed quality: never bigger than this ratio
         else if (a == "--max-ratio" && i + 1 < argc) o.max_ratio = atof(argv[++i]);   // fixed quality: never smaller than this ratio
         else if (a == "--camera-color") o.color = ColorSource::Camera;            // the camera's own color matrices instead of zraw-parser's fixed ones
@@ -736,6 +803,10 @@ static int cmd_convert(int argc, char** argv)
         { fprintf(stderr, "--quality needs a positive value and 1.5 <= --min-ratio < --max-ratio <= 20\n"); return 2; }
     if (o.lossy > 0)
     {
+        char mode[96];
+        if (o.quality > 0) snprintf(mode, sizeof mode, "lossy, fixed quality %.2f x noise (%.1f to %.1f:1)", o.quality, o.min_ratio, o.max_ratio);
+        else snprintf(mode, sizeof mode, "lossy %.2f:1", o.lossy);
+#ifdef _WIN32
         std::string why, names;
         if (gpu_list.empty()) gpu_list.push_back(0);   // the fastest GPU
         for (int g : gpu_list)
@@ -748,12 +819,13 @@ static int cmd_convert(int argc, char** argv)
             o.gpus.push_back(d);
             names += (names.empty() ? "" : " + ") + d->name;
         }
-        char mode[96];
-        if (o.quality > 0) snprintf(mode, sizeof mode, "lossy, fixed quality %.2f x noise (%.1f to %.1f:1)", o.quality, o.min_ratio, o.max_ratio);
-        else snprintf(mode, sizeof mode, "lossy %.2f:1", o.lossy);
         if (!o.gpus.empty()) fprintf(stderr, "%s, DCT and rate control on %s%s%s\n", mode, names.c_str(), why.empty() ? "" : " (not used: ", why.empty() ? "" : (why + ")").c_str());
         else fprintf(stderr, "%s on the CPU%s%s\n", mode, o.gpu ? ", GPU unavailable: " : "", o.gpu ? why.c_str() : "");
+#else
+        fprintf(stderr, "%s on the CPU\n", mode);
+#endif
     }
+#ifdef _WIN32
     if (o.denoise)   // on the first lossy GPU, or the fastest one
     {
         std::string why;
@@ -761,7 +833,8 @@ static int cmd_convert(int argc, char** argv)
         if (!o.dn_device) { fprintf(stderr, "denoise needs a GPU (%s): converting without it\n", why.c_str()); o.denoise = false; }
         else fprintf(stderr, "denoise on %s\n", o.dn_device->name.c_str());
     }
-    if (inputs.empty() || o.out.empty() || o.threads < 1) { fprintf(stderr, "usage: zrawdng convert <clip.MOV | folder>... -o <output folder> [--lossy ratio | --quality x [--min-ratio 2] [--max-ratio 8] | --lossless | --uncompressed [--pack]] [--cpu] [--denoise [light|strong]] [--scale half|quarter] [-j threads] [--zcam-dng-color | --camera-color | --videosuite-color] [--delete-originals [--permanent]]\n"); return 2; }
+#endif
+    if (inputs.empty() || o.out.empty() || o.threads < 1) { fprintf(stderr, "usage: %s", kConvertUsage); return 2; }
 
     std::vector<fs::path> clips;
     for (auto& in : inputs)
@@ -885,6 +958,7 @@ static int cmd_bench(int argc, char** argv)
     return 0;
 }
 
+#ifdef _WIN32
 // Plays a clip in libmpv (mpv's own window) with full seeking, scrubbing and frame stepping.
 static int cmd_play(int argc, char** argv)
 {
@@ -934,6 +1008,23 @@ static int cmd_play(int argc, char** argv)
     player.WaitUntilClosed();
     return 0;
 }
+
+// For GUIs: "@gpu\t<number>\t<name>\t<why not usable>" per GPU, fastest first
+static int cmd_gpuinfo()
+{
+    auto adapters = gpu_lossy::Device::Adapters();
+    int usable = 0;
+    for (int i = 0; i < (int)adapters.size(); ++i)
+    {
+        std::string why;
+        bool ok = gpu_lossy::Device::Get(i, &why) != nullptr;
+        usable += ok;
+        fprintf(stderr, "@gpu\t%d\t%s\t%s\n", i, gpu_lossy::Device::Name(adapters[i].Get()).c_str(), ok ? "" : why.c_str());
+    }
+    if (adapters.empty()) fprintf(stderr, "@gpu\t-1\t\tno hardware GPU\n");
+    return usable ? 0 : 1;
+}
+#endif
 
 // Study of fixed quality against fixed ratio: writes a CSV of the fixed-quality measure and the exact
 // entropy-coded size against the quantization scale, for 8 frames spread through each true-RAW clip.
@@ -1016,27 +1107,20 @@ static int cmd_qstudy(int argc, char** argv)
 int main(int argc, char** argv)
 {
     if (argc >= 2 && !strcmp(argv[1], "qstudy")) return cmd_qstudy(argc, argv);
+#ifdef _WIN32
     if (argc >= 2 && !strcmp(argv[1], "play")) return cmd_play(argc, argv);
+    if (argc >= 2 && !strcmp(argv[1], "gpuinfo")) return cmd_gpuinfo();
+#else
+    if (argc >= 2 && (!strcmp(argv[1], "play") || !strcmp(argv[1], "gpuinfo")))
+        { fprintf(stderr, "zrawdng %s works only on Windows\n", argv[1]); return 2; }
+#endif
     if (argc >= 2 && !strcmp(argv[1], "bench")) return cmd_bench(argc, argv);
     if (argc >= 2 && !strcmp(argv[1], "convert")) return cmd_convert(argc, argv);
-    if (argc >= 2 && !strcmp(argv[1], "gpuinfo"))   // for GUIs: "@gpu\t<number>\t<name>\t<why not usable>" per GPU, fastest first
-    {
-        auto adapters = gpu_lossy::Device::Adapters();
-        int usable = 0;
-        for (int i = 0; i < (int)adapters.size(); ++i)
-        {
-            std::string why;
-            bool ok = gpu_lossy::Device::Get(i, &why) != nullptr;
-            usable += ok;
-            fprintf(stderr, "@gpu\t%d\t%s\t%s\n", i, gpu_lossy::Device::Name(adapters[i].Get()).c_str(), ok ? "" : why.c_str());
-        }
-        if (adapters.empty()) fprintf(stderr, "@gpu\t-1\t\tno hardware GPU\n");
-        return usable ? 0 : 1;
-    }
     if (argc >= 2 && !strcmp(argv[1], "hash")) return cmd_hash(argc, argv);
-    fprintf(stderr,
-        "zrawdng convert <clip.MOV | folder>... -o <output folder> [--lossy ratio | --quality x [--min-ratio 2] [--max-ratio 8] | --lossless | --uncompressed [--pack]] [--cpu] [--denoise [light|strong]] [--scale half|quarter] [-j threads] [--delete-originals [--permanent]]\n"
+    fprintf(stderr, "%s"
+#ifdef _WIN32
         "zrawdng play <clip.MOV> [--start frame] [--exposure stops] [--half] [-j threads]\n"
-        "zrawdng hash <clip.MOV> <out.txt> [threads] [first] [count]\n");
+#endif
+        "zrawdng hash <clip.MOV> <out.txt> [threads] [first] [count]\n", kConvertUsage);
     return 2;
 }

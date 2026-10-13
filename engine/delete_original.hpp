@@ -5,6 +5,16 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#ifndef _WIN32
+// Linux has no Recycle Bin to undo a mistake with, so originals are never deleted there
+// (zrawdng convert refuses --delete-originals before it gets this far).
+inline bool DeleteOriginalAfterConversion(const std::filesystem::path&, const std::filesystem::path&, const std::vector<std::filesystem::path>&,
+                                          const std::vector<uint64_t>&, uint64_t, bool, std::string& msg)
+{
+    msg = "kept original: deleting works only on Windows";
+    return false;
+}
+#else
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -79,3 +89,4 @@ inline bool DeleteOriginalAfterConversion(const std::filesystem::path& clip, con
     msg = permanent ? "deleted original permanently" : "moved original to the Recycle Bin";
     return true;
 }
+#endif

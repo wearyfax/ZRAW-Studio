@@ -7,7 +7,7 @@
 #include <cstring>
 #include <memory>
 #include <vector>
-#include <intrin.h>
+#include "portable.hpp"
 // Needs tiny_dng_writer.h included first (dng.hpp does it); its implementation section has no include guard.
 
 // Encodes `image` (width x height, row-major). On success `out`/`out_len` point at a per-thread

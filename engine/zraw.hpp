@@ -8,7 +8,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
-#include <intrin.h>
+#include "portable.hpp"
 #include <immintrin.h>
 
 struct ZrawFrame

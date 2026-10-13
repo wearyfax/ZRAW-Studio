@@ -24,6 +24,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -31,6 +32,10 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#else
+#include <memory>
+#include "portable.hpp"
+#endif
 
 class HevcZraw
 {
@@ -44,10 +49,13 @@ public:
     HevcZraw() = default;
     HevcZraw(const HevcZraw&) = delete;
     HevcZraw& operator=(const HevcZraw&) = delete;
+#ifdef _WIN32
     ~HevcZraw() { if (file_ != INVALID_HANDLE_VALUE) CloseHandle(file_); }
+#endif
 
     bool Open(const std::filesystem::path& path, std::string& err)
     {
+#ifdef _WIN32
         file_ = CreateFileW(path.wstring().c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (file_ == INVALID_HANDLE_VALUE) { err = "cannot open file"; return false; }
         LARGE_INTEGER size;
@@ -60,6 +68,12 @@ public:
             DWORD got = 0;
             return n <= 0xFFFFFFFFu && ReadFile(h, buf, (DWORD)n, &got, &ov) && got == n;
         }, (uint64_t)size.QuadPart, err);
+#else
+        file_ = std::make_unique<PosixFile>(path);
+        if (!file_->ok()) { err = "cannot open file"; return false; }
+        const PosixFile* f = file_.get();
+        return Open([f](uint64_t off, void* buf, size_t n) { return f->read_at(off, buf, n); }, f->size(), err);
+#endif
     }
 
     bool Open(ReadFn read, uint64_t file_size, std::string& err)
@@ -133,7 +147,11 @@ private:
         bool key = false;
     };
 
+#ifdef _WIN32
     HANDLE file_ = INVALID_HANDLE_VALUE;
+#else
+    std::unique_ptr<PosixFile> file_;
+#endif
     ReadFn read_;
     uint64_t file_size_ = 0, old_moov_type_ = 0;
     uint32_t key_ = 0;   // the movie's creation time

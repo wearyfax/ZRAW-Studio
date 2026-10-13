@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -14,6 +15,9 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#else
+#include "portable.hpp"
+#endif
 
 struct MovZraw
 {
@@ -63,36 +67,46 @@ inline bool LoadMoov(const std::filesystem::path& path, std::vector<uint8_t>& mo
 {
     using namespace movparse_detail;
     moov.clear();
+#ifdef _WIN32
     HANDLE h = CreateFileW(path.wstring().c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) { err = "cannot open file"; return false; }
-    LARGE_INTEGER fsize;
-    GetFileSizeEx(h, &fsize);
-    auto read_at = [&](uint64_t off, void* buf, DWORD n) {
+    LARGE_INTEGER li;
+    GetFileSizeEx(h, &li);
+    const uint64_t fsize = (uint64_t)li.QuadPart;
+    auto read_at = [&](uint64_t off, void* buf, uint32_t n) {
         OVERLAPPED ov = {};
         ov.Offset = (DWORD)off;
         ov.OffsetHigh = (DWORD)(off >> 32);
         DWORD got = 0;
         return ReadFile(h, buf, n, &got, &ov) && got == n;
     };
-    for (uint64_t pos = 0; pos + 8 <= (uint64_t)fsize.QuadPart;)
+#else
+    PosixFile f(path);
+    if (!f.ok()) { err = "cannot open file"; return false; }
+    const uint64_t fsize = f.size();
+    auto read_at = [&](uint64_t off, void* buf, uint32_t n) { return f.read_at(off, buf, n); };
+#endif
+    for (uint64_t pos = 0; pos + 8 <= fsize;)
     {
         uint8_t hdr[16];
         if (!read_at(pos, hdr, 8)) break;
         uint64_t size = be32(hdr);
         size_t hlen = 8;
         if (size == 1) { if (!read_at(pos + 8, hdr + 8, 8)) break; size = be64(hdr + 8); hlen = 16; }
-        else if (size == 0) size = fsize.QuadPart - pos;
+        else if (size == 0) size = fsize - pos;
         if (size < hlen) break;
         if (!memcmp(hdr + 4, "moov", 4))
         {
             if (size > (64u << 20)) break;
             moov.resize((size_t)(size - hlen));
-            if (!read_at(pos + hlen, moov.data(), (DWORD)moov.size())) moov.clear();
+            if (!read_at(pos + hlen, moov.data(), (uint32_t)moov.size())) moov.clear();
             break;
         }
         pos += size;
     }
+#ifdef _WIN32
     CloseHandle(h);
+#endif
     if (moov.empty()) { err = "no readable moov atom"; return false; }
     return true;
 }
@@ -127,7 +141,8 @@ inline std::vector<std::pair<std::string, std::string>> ReadClipMeta(const std::
     for (auto& item : children(ilst->body, ilst->size))
     {
         uint32_t index = be32((const uint8_t*)item.type);   // the item's "type" is its 1-based key index
-        const Atom* data = find(children(item.body, item.size), "data");
+        const auto kids = children(item.body, item.size);   // kept alive: `data` points into it
+        const Atom* data = find(kids, "data");
         if (!data || data->size < 8 || index == 0 || index > names.size() || be32(data->body) != 1) continue;   // 1 = UTF-8
         out.emplace_back(names[index - 1], std::string((const char*)data->body + 8, data->size - 8));
     }

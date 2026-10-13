@@ -29,11 +29,15 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 #include <bcrypt.h>
 #pragma comment(lib, "bcrypt.lib")
+#else
+#include <wmmintrin.h>
+#endif
 #include "zraw.hpp"
 
 struct DngColor
@@ -102,6 +106,7 @@ namespace camera_color_detail
         }
     }
 
+#ifdef _WIN32
     inline bool decrypt(const uint8_t* in, size_t n, uint8_t* out)
     {
         thread_local BCRYPT_ALG_HANDLE alg = nullptr;
@@ -117,6 +122,36 @@ namespace camera_color_detail
         ULONG got = 0;
         return BCryptDecrypt(key, (PUCHAR)in, (ULONG)n, nullptr, iv, 16, out, (ULONG)n, &got, 0) == 0 && got == n;
     }
+#else
+    // Linux: AES-128-CBC decryption with AES-NI, which every CPU with AVX2 has
+    __attribute__((target("aes"))) inline bool decrypt(const uint8_t* in, size_t n, uint8_t* out)
+    {
+        static const char kKey[16] = "jisofsdguhfusxc";   // 15 characters and the terminating zero
+        static const uint8_t kRcon[10] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36};
+        __m128i k[11];
+        k[0] = _mm_loadu_si128((const __m128i*)kKey);
+        for (int r = 1; r <= 10; ++r)   // key schedule
+        {
+            __m128i t = _mm_xor_si128(_mm_shuffle_epi32(_mm_aeskeygenassist_si128(k[r - 1], 0), 0xFF), _mm_set1_epi32(kRcon[r - 1]));
+            __m128i x = k[r - 1];
+            x = _mm_xor_si128(x, _mm_slli_si128(x, 4));
+            x = _mm_xor_si128(x, _mm_slli_si128(x, 4));
+            x = _mm_xor_si128(x, _mm_slli_si128(x, 4));
+            k[r] = _mm_xor_si128(x, t);
+        }
+        for (int r = 1; r < 10; ++r) k[r] = _mm_aesimc_si128(k[r]);   // decryption round keys
+        __m128i prev = _mm_setzero_si128();   // zero IV
+        for (size_t i = 0; i + 16 <= n; i += 16)
+        {
+            const __m128i c = _mm_loadu_si128((const __m128i*)(in + i));
+            __m128i x = _mm_xor_si128(c, k[10]);
+            for (int r = 9; r > 0; --r) x = _mm_aesdec_si128(x, k[r]);
+            _mm_storeu_si128((__m128i*)(out + i), _mm_xor_si128(_mm_aesdeclast_si128(x, k[0]), prev));
+            prev = c;
+        }
+        return true;
+    }
+#endif
 }
 
 // Which matrices a conversion writes:

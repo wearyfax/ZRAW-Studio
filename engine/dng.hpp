@@ -4,9 +4,13 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#else
+#include <cstdio>
+#endif
 #include "zraw.hpp"
 #include "camera_color.hpp"
 
@@ -74,11 +78,21 @@ inline bool WriteDngWithStandIn(const std::string& path, tinydngwriter::DNGImage
     memcpy(header + 4, &ifd_offset, 4);
     const uint32_t next_ifd = 0;
 
+#ifdef _WIN32
     HANDLE h = CreateFileA(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) { err = "cannot create " + path; return false; }
     auto put = [&](const void* p, size_t n) { DWORD done = 0; return n == 0 || (WriteFile(h, p, (DWORD)n, &done, nullptr) && done == n); };
+#else
+    FILE* h = fopen(path.c_str(), "wb");
+    if (!h) { err = "cannot create " + path; return false; }
+    auto put = [&](const void* p, size_t n) { return n == 0 || fwrite(p, 1, n, h) == n; };
+#endif
     bool ok = put(header, 8) && put(area.data(), strip) && put(data, len) && put(ifd.data(), ifd.size()) && put(&next_ifd, 4);
+#ifdef _WIN32
     CloseHandle(h);
+#else
+    if (fclose(h)) ok = false;
+#endif
     if (!ok) err = "write failed: " + path;
     if (ok && written) *written = 8 + strip + len + ifd.size() + 4;   // file size, checked before --delete-originals
     return ok;

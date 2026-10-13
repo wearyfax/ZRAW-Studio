@@ -4,7 +4,7 @@
 #pragma once
 #include <cstdint>
 #include <cstring>
-#include <intrin.h>
+#include "portable.hpp"
 
 struct JpegBitWriter
 {
