@@ -189,16 +189,23 @@ float plane_value(uint plane, int py, int px)
 
 float ivst(float yv) { float q = a * yv * 0.5; return (q * q - 0.375 * a * a - f2) / a; }
 
+uint ref_slot() { for (uint j = 0; j < nfr; ++j) if (info[j].w != 0) return (uint)info[j].x; return 0; }
+
+// A photosite clipped in the frame being denoised keeps its value. Its real level is unknown, and a
+// merged value under the sensor's clip (4094, the DNGs' WhiteLevel) would hide it from highlight
+// recovery in the raw developer.
+uint keep_clipped(float merged, float original) { return original >= 4094.0 ? (uint)original : (uint)clamp(round(merged), 0.0, 4095.0); }
+
 [numthreads(64, 1, 1)]
 void compose_main(uint3 id : SV_DispatchThreadID)
 {
     uint i = id.x;                       // one output uint = two horizontally adjacent photosites
     if (i >= W * H / 2) return;
     uint y = (i * 2) / W, x = (i * 2) % W;
-    uint row = y & 1;
+    uint row = y & 1, rs = ref_slot();
     float v0 = ivst(plane_value(row * 2 + 0, (int)(y >> 1), (int)(x >> 1))) + black;
     float v1 = ivst(plane_value(row * 2 + 1, (int)(y >> 1), (int)(x >> 1))) + black;
-    uint a0 = (uint)clamp(round(v0), 0.0, 4095.0), a1 = (uint)clamp(round(v1), 0.0, 4095.0);
+    uint a0 = keep_clipped(v0, sample_cfa(rs, (int)y, (int)x)), a1 = keep_clipped(v1, sample_cfa(rs, (int)y, (int)x + 1));
     outcfa[i] = a0 | (a1 << 16);
 }
 )HLSL";
