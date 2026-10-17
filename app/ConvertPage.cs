@@ -42,7 +42,7 @@ public class ConvertPage : UserControl
     readonly RichTextBox log = Z.Log();
     readonly MetroButton add = Z.Button(L.T("Add clips..."), false), addFolder = Z.Button(L.T("Add folder..."), false), remove = Z.Button(L.T("Remove"), false), clear = Z.Button(L.T("Clear"), false);
     readonly MetroButton start = Z.Button(L.T("Start"), true), pause = Z.Button(L.T("Pause"), false), stop = Z.Button(L.T("Stop"), false), browse = Z.Button(L.T("Browse..."), false), openOut = Z.Button(L.T("Open"), false);
-    readonly MetroComboBox format = Z.Combo(L.T("Lossy CinemaDNG (Resolve)"), L.T("Lossless CinemaDNG"), L.T("Uncompressed"), L.T("Uncompressed, packed 12-bit"));
+    readonly MetroComboBox format = Z.Combo(L.T("Lossy CinemaDNG (Resolve)"), L.T("Lossless CinemaDNG"), L.T("Uncompressed"), L.T("Uncompressed, packed"));
     readonly MetroComboBox scale = Z.Combo(L.T("Full resolution"), L.T("Half resolution"), L.T("Quarter resolution"));
     readonly MetroComboBox denoise = Z.Combo(L.T("Off"), L.T("Light"), L.T("Strong"));   // engine --denoise [light|strong]: temporal raw denoise on the GPU
     readonly MetroComboBox colorMatrix = Z.Combo(Look.Names);   // DNG color matrices (engine default / --zcam-dng-color / --camera-color / --videosuite-color)
@@ -95,7 +95,7 @@ public class ConvertPage : UserControl
         grid.Columns.Add("status", L.T("Status"));
         grid.Columns.Add("progress", L.T("Progress"));
         grid.Columns[0].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-        grid.Columns[1].Width = 110; grid.Columns[2].Width = 70; grid.Columns[3].Width = 70; grid.Columns[4].Width = 250; grid.Columns[5].Width = 80;
+        grid.Columns[1].Width = 140; grid.Columns[2].Width = 70; grid.Columns[3].Width = 70; grid.Columns[4].Width = 220; grid.Columns[5].Width = 80;
         foreach (DataGridViewColumn col in grid.Columns) col.SortMode = DataGridViewColumnSortMode.NotSortable;   // no sort glyph gap, headers sit over their values
         foreach (int i in new[] { 2, 3, 5 }) grid.Columns[i].DefaultCellStyle.Alignment = grid.Columns[i].HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleRight;
 
@@ -510,7 +510,13 @@ public class ConvertPage : UserControl
             foreach (var p in input)
                 if (Directory.Exists(p)) Collect(p, files);
                 else if (File.Exists(p)) files.Add(p);
-            var infos = files.Select(f => { try { return MovInfo.Read(f); } catch { return new MovInfo(); } }).ToList();
+            var infos = files.AsParallel().AsOrdered().Select(f =>
+            {
+                MovInfo i;
+                try { i = MovInfo.Read(f); } catch { return new MovInfo(); }
+                try { if (i.TrueRaw) i.Bits = ZrawCore.DataBits(f); else if (i.Hevc) i.Bits = 10; } catch { }   // decodes one frame per RAW clip
+                return i;
+            }).ToList();
             BeginInvoke(new Action(() => AddClips(files, infos)));
         });
     }
@@ -528,6 +534,14 @@ public class ConvertPage : UserControl
         }
     }
 
+    // What the clip holds, for the Type column and the line under each thumbnail. A 14-bit file whose
+    // pixels only use 12 bits (the E2's 14-bit mode before it was unlocked) shows as 12-bit.
+    static string Kind(MovInfo i)
+    {
+        if (i.Hevc) return L.T("ZRAW H.265 10-bit");
+        return i.Bits > 0 ? L.F("ZRAW Bayer {0}-bit", i.Bits) : "ZRAW Bayer";
+    }
+
     void AddClips(List<string> files, List<MovInfo> infos)
     {
         var known = new HashSet<string>(clips.Select(c => c.Path), StringComparer.OrdinalIgnoreCase);
@@ -540,7 +554,7 @@ public class ConvertPage : UserControl
             var info = infos[i];
             var c = new Clip { Path = files[i], Info = info, T = new Thumb { Path = files[i], Raw = info.TrueRaw || info.Hevc } };
             string length = info.Fps > 0 ? TimeSpan.FromSeconds(info.Frames / info.Fps).ToString(@"m\:ss") : "";
-            c.Row = grid.Rows[grid.Rows.Add(Path.GetFileName(c.Path), info.TrueRaw ? "RAW \u2192 DNG" : "HEVC \u2192 MOV", info.Frames.ToString(), length, L.T("Ready"), "")];
+            c.Row = grid.Rows[grid.Rows.Add(Path.GetFileName(c.Path), Kind(info), info.Frames.ToString(), length, L.T("Ready"), "")];
             if (info.Hevc) hevc++;
             c.Row.Cells[0].ToolTipText = c.Path;
             c.Row.Tag = c.T;

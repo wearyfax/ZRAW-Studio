@@ -670,6 +670,7 @@ static class ZrawCore
     [DllImport("zrawcore.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)] static extern int zr_clip_info_get(string path, out Info info);
     [StructLayout(LayoutKind.Sequential)] struct PreviewSettings { public double Exposure, WbRed, WbBlue; public int FullRes, Matrix; }   // zr_preview_settings
     [DllImport("zrawcore.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)] static extern int zr_render_frame(string path, int frame, ref PreviewSettings settings, byte[] rgb, long size);
+    [DllImport("zrawcore.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)] static extern int zr_clip_data_bits(string path, out int bits);
     [DllImport("zrawcore.dll", CallingConvention = CallingConvention.Cdecl)] static extern IntPtr zr_last_error();
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr LoadLibrary(string path);
     static readonly object gate = new object();
@@ -688,6 +689,15 @@ static class ZrawCore
     }
 
     static string Error() { return Marshal.PtrToStringAnsi(zr_last_error()) ?? "unknown error"; }
+
+    // The bit depth a clip's pixels really use, from its first frame: 12 for a 14-bit file that holds
+    // 12-bit data, 14 for true 14-bit, 10 for HEVC. 0 when the clip can't be read.
+    public static int DataBits(string path)
+    {
+        Load();
+        int bits;
+        return zr_clip_data_bits(path, out bits) == 0 ? bits : 0;
+    }
 
     // One frame at half resolution in the preview look chosen on the Player tab (camera white balance,
     // that color matrix and exposure, sRGB)
@@ -751,6 +761,7 @@ class MovInfo
     public uint Scheme;           // HEVC: the 'zraw' box's third word, 1 on the clips we can unscramble
     public int Frames;
     public double Fps;
+    public int Bits;              // bit depth the pixels really use (10 for HEVC; ZrawCore.DataBits for RAW), 0 = unknown
     public bool TrueRaw { get { return Codec == "zraw" && ZrawVersion == 0x12EA78D2; } }
     public bool Hevc { get { return Codec == "zraw" && ZrawVersion == 0x45A32DEF; } }
     public bool Convertible { get { return TrueRaw || Hevc && Scheme == 1; } }

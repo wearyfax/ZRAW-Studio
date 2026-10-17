@@ -46,6 +46,12 @@ ZRAWCORE_API const char* zr_last_error(void);
 
 ZRAWCORE_API int zr_clip_info_get(const wchar_t* path, zr_clip_info* out);
 
+/* The bit depth the clip's pixels really use, from its first frame: bits that are zero in every
+ * photosite are not counted, so a 14-bit file holding 12-bit data (the E2's 14-bit mode before it was
+ * unlocked) reports 12, and true 14-bit footage 14. H.265 ZRAW reports 10. Decodes one frame (about
+ * 50 ms for UHD). */
+ZRAWCORE_API int zr_clip_data_bits(const wchar_t* path, int32_t* out);
+
 /* Half-resolution rgb24 preview of one frame, rows top to bottom, (width/2) * 3 bytes per row.
  * `rgb` must hold (width/2) * (height/2) * 3 bytes. `settings` may be NULL for the recorded look. */
 ZRAWCORE_API int zr_render_frame(const wchar_t* path, int32_t frame, const zr_preview_settings* settings, uint8_t* rgb, int64_t rgb_size);

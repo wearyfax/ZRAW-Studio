@@ -43,6 +43,23 @@ ZRAWCORE_API int zr_clip_info_get(const wchar_t* path, zr_clip_info* out)
     return 0;
 }
 
+ZRAWCORE_API int zr_clip_data_bits(const wchar_t* path, int32_t* out)
+{
+    if (!path || !out) return fail("null argument");
+    if (is_hevc(path)) { *out = 10; return 0; }
+    std::string err;
+    ZrawClip clip;
+    std::vector<uint8_t> data;
+    ZrawFrame f;
+    std::vector<uint16_t> cfa;
+    if (!clip.Open(path, err) || !clip.Decode(0, data, f, cfa, err)) return fail(err);
+    uint32_t any = 0;
+    for (uint16_t v : cfa) any |= v;
+    unsigned long low = 0;
+    *out = any && _BitScanForward(&low, any) ? clip.bits - (int)low : clip.bits;
+    return 0;
+}
+
 ZRAWCORE_API int zr_render_frame(const wchar_t* path, int32_t frame, const zr_preview_settings* settings, uint8_t* rgb, int64_t rgb_size)
 {
     if (!path || !rgb) return fail("null argument");

@@ -88,6 +88,8 @@ The default color matrices come from spectrophotometer measurements of a Z CAM E
 
 Z CAM firmware before 0.94, and patched firmware, records Bayer ZRAW, which ZRAW Studio converts to CinemaDNG. Firmware 0.94 and later records H.265 ZRAW, which becomes a standard H.265 `.mov` in seconds, with no re-encoding.
 
+The Type column, and the line under each thumbnail, says what a clip holds: ZRAW Bayer 12-bit, ZRAW Bayer 14-bit or ZRAW H.265 10-bit. ZRAW Studio reads the pixels to decide, so a clip whose header says 14-bit but whose data is only 12-bit shows as 12-bit. Every output format keeps true 14-bit: lossless and uncompressed store all 14 bits, and lossy keeps the extra precision in the shadows. A 14-bit file that only holds 12-bit data is written as 12-bit, which saves about a sixth of the space in lossless. Recorded in the camera's low-noise mode, 14-bit footage has about a third less noise in the shadows than standard 12-bit.
+
 ### Renaming clips
 
 The camera gives ZRAW and H.265 recordings the same `.MOV` name. The Tagger tab finds the ZRAW clips by their contents and adds a `ZRAW_` prefix, and it can undo that too.
