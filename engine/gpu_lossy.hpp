@@ -37,10 +37,10 @@ cbuffer Params : register(b0)
 {
     uint W, H, tile_w, jw;
     uint jh, bw, bh, blocks;
-    uint shift, down, num_scales, cap_words;   // cap_words: stream space per tile
+    uint shift, down, num_scales, cap_words;   // shift: to the 14-bit lut index (down is unused, 0); cap_words: stream space per tile
 };
 StructuredBuffer<uint>  cfa     : register(t0);   // two 16-bit samples per element
-StructuredBuffer<uint>  enc_lut : register(t1);   // 12-bit linear -> curve code
+StructuredBuffer<uint>  enc_lut : register(t1);   // 14-bit linear -> curve code
 StructuredBuffer<float> descale : register(t2);   // AAN output -> JPEG coefficient, natural order
 StructuredBuffer<float> inv_q   : register(t3);   // num_scales x 64, zigzag order
 StructuredBuffer<uint>  dc_len  : register(t4);
@@ -103,8 +103,9 @@ void dct_main(uint3 id : SV_DispatchThreadID)
         uint jy = min(by * 8 + y, jh - 1), jx = min(bx * 8 + x, jw - 1);
         uint right = jx >= tile_w ? 1 : 0;                 // JPEG row jy = image rows 2jy | 2jy+1
         uint sx = t * tile_w + jx - right * tile_w, sy = 2 * jy + right;
-        uint v = (sample_at(sx, sy) << shift) >> down;
-        d[y * 8 + x] = (float)((int)enc_lut[min(v, 4095u)] - 2048);
+        if (sx >= W) sx = W - 2 + (sx & 1);                // padding past the right edge (lossy::TileWidth)
+        uint v = sample_at(sx, sy) << shift;
+        d[y * 8 + x] = (float)((int)enc_lut[min(v, 16383u)] - 2048);
     }
     [unroll] for (uint row = 0; row < 8; ++row) FDCT8(d, row * 8, 1)
     [unroll] for (uint col = 0; col < 8; ++col) FDCT8(d, col, 8)
@@ -352,14 +353,13 @@ void emit_main(uint3 id : SV_DispatchThreadID)
                 !compile("scan_main", scan) || !compile("emit_main", emit)) return false;
 
             const lossy::Curve& cv = lossy::curve();
-            uint32_t lut32[4096];
-            for (int i = 0; i < 4096; ++i) lut32[i] = cv.encode[i];
+            std::vector<uint32_t> lut32(cv.encode, cv.encode + 16384);
             const lossy::Tables& tb = lossy::tables();
             uint32_t dcl[16], acl[256], dcc[16], acc[256];
             for (int i = 0; i < 16; ++i) { dcl[i] = tb.dc.len[i]; dcc[i] = tb.dc.code[i]; }
             for (int i = 0; i < 256; ++i) { acl[i] = tb.ac.len[i]; acc[i] = tb.ac.code[i]; }
             const UINT srv = D3D11_BIND_SHADER_RESOURCE;
-            bool ok = make_buffer(dev.Get(), sizeof lut32, srv, D3D11_USAGE_IMMUTABLE, 0, 4, lut32, lut) && make_srv(dev.Get(), lut.Get(), lut_srv) &&
+            bool ok = make_buffer(dev.Get(), (UINT)(lut32.size() * 4), srv, D3D11_USAGE_IMMUTABLE, 0, 4, lut32.data(), lut) && make_srv(dev.Get(), lut.Get(), lut_srv) &&
                       make_buffer(dev.Get(), sizeof(float) * 64, srv, D3D11_USAGE_IMMUTABLE, 0, 4, lossy::aan().f, descale) && make_srv(dev.Get(), descale.Get(), descale_srv) &&
                       make_buffer(dev.Get(), sizeof dcl, srv, D3D11_USAGE_IMMUTABLE, 0, 4, dcl, dc_len) && make_srv(dev.Get(), dc_len.Get(), dc_len_srv) &&
                       make_buffer(dev.Get(), sizeof acl, srv, D3D11_USAGE_IMMUTABLE, 0, 4, acl, ac_len) && make_srv(dev.Get(), ac_len.Get(), ac_len_srv) &&
@@ -477,15 +477,15 @@ void emit_main(uint3 id : SV_DispatchThreadID)
 
         bool Transform(const uint16_t* cfa_in, int W, int H, int bits, lossy::Coefficients& co) override
         {
-            co.tile_w = W / co.tiles;
+            co.tile_w = lossy::TileWidth(W);
             co.jw = co.tile_w * 2;
             co.jh = H / 2;
             co.bw = (co.jw + 7) / 8;
             co.bh = (co.jh + 7) / 8;
             const size_t blocks = (size_t)co.tiles * co.bw * co.bh;
             p = {(uint32_t)W, (uint32_t)H, (uint32_t)co.tile_w, (uint32_t)co.jw, (uint32_t)co.jh, (uint32_t)co.bw, (uint32_t)co.bh, (uint32_t)blocks,
-                 (uint32_t)(bits < 12 ? 12 - bits : 0), (uint32_t)(bits > 12 ? bits - 12 : 0), 0,
-                 (uint32_t)((size_t)W * H * 12 / co.tiles / 32)};
+                 (uint32_t)lossy::CurveShift(bits), 0, 0,
+                 (uint32_t)((size_t)co.tile_w * H * 12 / 32)};
             ID3D11DeviceContext* c = g.ctx.Get();
             D3D11_MAPPED_SUBRESOURCE m;
             {

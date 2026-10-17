@@ -35,7 +35,7 @@ cbuffer Params : register(b0)
     uint W, H, pw, ph;            // frame and plane size
     uint nfr, slot_words, tiles_x, tiles_y;
     float black, a, f2, temporal;
-    float spatial, noise_var, pad0, pad1;
+    float spatial, noise_var, top, clipped;   // top: the largest sample value; clipped: where the sensor clips
 };
 StructuredBuffer<uint> frames : register(t0);   // Store: slots of W x H 16-bit samples, two per uint
 StructuredBuffer<int4> info   : register(t1);   // per window frame: slot, dy, dx, is_reference
@@ -194,7 +194,7 @@ uint ref_slot() { for (uint j = 0; j < nfr; ++j) if (info[j].w != 0) return (uin
 // A photosite clipped in the frame being denoised keeps its value. Its real level is unknown, and a
 // merged value under the sensor's clip (4094, the DNGs' WhiteLevel) would hide it from highlight
 // recovery in the raw developer.
-uint keep_clipped(float merged, float original) { return original >= 4094.0 ? (uint)original : (uint)clamp(round(merged), 0.0, 4095.0); }
+uint keep_clipped(float merged, float original) { return original >= clipped ? (uint)original : (uint)clamp(round(merged), 0.0, top); }
 
 [numthreads(64, 1, 1)]
 void compose_main(uint3 id : SV_DispatchThreadID)
@@ -210,7 +210,7 @@ void compose_main(uint3 id : SV_DispatchThreadID)
 }
 )HLSL";
 
-    struct Params { uint32_t W, H, pw, ph, nfr, slot_words, tiles_x, tiles_y; float black, a, f2, temporal, spatial, noise_var, pad0, pad1; };
+    struct Params { uint32_t W, H, pw, ph, nfr, slot_words, tiles_x, tiles_y; float black, a, f2, temporal, spatial, noise_var, top, clipped; };
 
     struct Settings { int radius = 2; float temporal = 8, spatial = 0.5f; };
 
@@ -277,13 +277,19 @@ void compose_main(uint3 id : SV_DispatchThreadID)
         bool ok() const { return ok_; }
 
         // slots[i] and offs[i] (dy, dx in plane pixels) describe each window frame; ref is the reference's index.
+        // black is in the frame's own units; a and f2 are the noise model in 12-bit DN (lossy::E2Noise),
+        // rescaled here to the frame's `bits`. The stabilizing transform gives exactly the same result on
+        // the 4x finer 14-bit scale, so 14-bit footage keeps its two extra bits.
         bool Run(const std::vector<uint32_t>& slots, const std::vector<std::pair<int, int>>& offs, int ref, double black, double a, double f2,
-                 const Settings& s, uint16_t* cfa_out)
+                 int bits, const Settings& s, uint16_t* cfa_out)
         {
+            const double k = std::ldexp(1.0, bits - 12), top = std::ldexp(1.0, bits) - 1;
+            a *= k;
+            f2 *= k * k;
             int32_t fi[8][4] = {};
             for (size_t i = 0; i < slots.size() && i < 8; ++i) { fi[i][0] = (int32_t)slots[i]; fi[i][1] = offs[i].first; fi[i][2] = offs[i].second; fi[i][3] = (int)i == ref; }
             Params p = {st.W, st.H, st.W / 2, st.H / 2, (uint32_t)slots.size(), st.W * st.H / 2, tx, ty,
-                        (float)black, (float)a, (float)f2, s.temporal, s.spatial, 36.0f, 0, 0};   // noise_var: (sum of the 1D window squared = 6)^2
+                        (float)black, (float)a, (float)f2, s.temporal, s.spatial, 36.0f, (float)top, (float)(top - 1)};   // noise_var: (sum of the 1D window squared = 6)^2; clipped: 4094 / 16382
             auto& g = st.g;
             {
                 std::lock_guard<std::mutex> l(g.lock);

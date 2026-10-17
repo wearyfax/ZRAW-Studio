@@ -40,7 +40,7 @@ namespace lossy
     struct Curve
     {
         uint16_t to_linear[4096];   // LinearizationTable: code -> 16-bit linear
-        uint16_t encode[4096];      // 12-bit linear sample -> nearest code
+        uint16_t encode[16384];     // 14-bit linear sample -> nearest code (12-bit samples index it times 4)
         Curve()
         {
             for (int c = 0; c < 4096; ++c) to_linear[c] = (uint16_t)CurveToLinear(c);
@@ -65,9 +65,9 @@ namespace lossy
         }
         void fill_encode()
         {
-            for (int x = 0; x < 4096; ++x)
+            for (int x = 0; x < 16384; ++x)
             {
-                uint32_t v = (uint32_t)x * 16;   // 12-bit linear into the curve's 16-bit domain
+                uint32_t v = (uint32_t)x * 4;   // 14-bit linear into the curve's 16-bit domain
                 int c = (int)(std::lower_bound(to_linear, to_linear + 4096, v) - to_linear);
                 if (c == 4096) c = 4095;
                 else if (c > 0 && v - to_linear[c - 1] <= (uint32_t)to_linear[c] - v) --c;
@@ -75,7 +75,7 @@ namespace lossy
             }
         }
     };
-    // One global curve built for the E2's black level (200; every clip examined has 200 to 202); another
+    // One global curve built for the E2's black level (200 at 12 bits, 796 to 800 at 14); another
     // black only makes the shadows' code spacing a little less even, as long as it is above 48.
     constexpr double kCurveBlack = 200;
     inline const Curve*& active_curve() { static const Curve* c = new Curve(kCurveBlack); return c; }
@@ -267,18 +267,25 @@ namespace lossy
         return _mm256_cvtps_epi32(_mm256_blendv_ps(r, away, half));
     }
 
+    // Tile width: a quarter of the image, rounded up to the multiple of 16 TIFF requires of tiles. The
+    // last tile then runs past the right edge (3696-wide footage: 4 x 928 = 3712) and readers crop it.
+    inline int TileWidth(int W) { return (W / 4 + 15) & ~15; }
+
+    // Curve encoder index for a sample of `bits` bits: the 14-bit scale the encode table uses
+    inline int CurveShift(int bits) { return 14 - bits; }   // ponytail: E2 footage is 12 or 14 bits; deeper data would need a right shift
+
     // Curve-encodes the CFA and runs the DCT for every block of every tile (AVX2).
     inline void Transform(const uint16_t* cfa, int W, int H, int bits, Coefficients& out)
     {
         const Curve& cv = curve();
         const AanDescale& ds = aan();
-        out.tile_w = W / out.tiles;
+        out.tile_w = TileWidth(W);
         out.jw = out.tile_w * 2;
         out.jh = H / 2;
         out.bw = (out.jw + 7) / 8;
         out.bh = (out.jh + 7) / 8;
         out.c.resize((size_t)out.tiles * out.bw * out.bh * 64);
-        const int shift = bits < 12 ? 12 - bits : 0, down = bits > 12 ? bits - 12 : 0;
+        const int shift = CurveShift(bits);
         alignas(32) float blk[64];
         alignas(32) int32_t q[64];
         for (int t = 0; t < out.tiles; ++t)
@@ -293,8 +300,9 @@ namespace lossy
                             int jx = std::min(bx * 8 + x, out.jw - 1);
                             int right = jx >= out.tile_w;
                             int sx = t * out.tile_w + jx - right * out.tile_w, sy = 2 * jy + right;
-                            int v = ((int)cfa[(size_t)sy * W + sx] << shift) >> down;
-                            blk[y * 8 + x] = (float)((int)cv.encode[std::min(v, 4095)] - 2048);
+                            if (sx >= W) sx = W - 2 + (sx & 1);   // padding past the right edge: the last column of the same color
+                            int v = (int)cfa[(size_t)sy * W + sx] << shift;
+                            blk[y * 8 + x] = (float)((int)cv.encode[std::min(v, 16383)] - 2048);
                         }
                     }
                     __m256 v[8];
@@ -483,8 +491,13 @@ namespace lossy
     // sigma^2 = 1.24e-4 x ISO x signal + floor^2. The floor depends on the gain mode (ISO 2500 and
     // up is the high-gain one) and is interpolated in log ISO within it. Unknown ISO (iso <= 0): ISO
     // 500's model, the lowest noise at every level, so the quality is never lower than asked.
+    // 14-bit footage is recorded in LN (low noise) mode: same gain and shot noise, lower floor, 0.51 DN
+    // against 0.76 at ISO 500 on lens-cap frames (2026-10-17, UHD and 3696 x 2772 alike), so its floors
+    // are two thirds of these. LN mode is in neither the clip metadata nor the frame parameters, so
+    // the bit depth stands in for it; 12-bit LN footage keeps the normal floor.
+    // ponytail: measured at ISO 500 only; an LN ISO series would replace the factor with a table.
     struct Noise { double a, floor2; };
-    inline Noise E2Noise(double iso)
+    inline Noise E2Noise(double iso, int bits = 12)
     {
         static const double low[][2] = {{500, 0.76}, {800, 1.00}, {1250, 1.36}, {2000, 1.92}};
         static const double high[][2] = {{2500, 0.82}, {3200, 0.95}, {5000, 1.28}, {6400, 1.53}, {32000, 5.57}};
@@ -495,6 +508,7 @@ namespace lossy
         for (int i = 0; i + 1 < n; ++i)
             if (iso > t[i][0] && iso <= t[i + 1][0])
                 f = t[i][1] * std::pow(t[i + 1][1] / t[i][1], std::log(iso / t[i][0]) / std::log(t[i + 1][0] / t[i][0]));
+        if (bits >= 14) f *= 0.67;
         return {1.24e-4 * iso, f * f};
     }
 
@@ -519,6 +533,10 @@ namespace lossy
         int band_n[kBands] = {};
     };
     inline int BandOf(double signal) { return signal < 8 ? 0 : std::min(kBands - 1, (int)std::log2(signal) - 2); }
+
+    // The frame's mean black level in 12-bit DN, the unit of the noise model and of the curve (to_linear / 16).
+    // 14-bit footage is the same signal on a 4x finer scale (black 796 to 800 against 200).
+    inline double Black12(const ZrawFrame& f) { return std::ldexp((f.black[0] + f.black[1] + f.black[2] + f.black[3]) / 4.0, 12 - f.bits()); }
 
     inline void NoiseWeights(const Coefficients& co, const Noise& nz, double black, double var_scale, NoiseMap& m)
     {
@@ -755,7 +773,7 @@ namespace lossy
                               RateState& state, std::string& err, uint64_t* written = nullptr, Result* result = nullptr,
                               Backend* backend = nullptr)
     {
-        if (f.width % 32 || f.height % 2) { err = "lossy DNG needs a width divisible by 32 and an even height"; return false; }
+        if (f.width % 4 || f.height % 2 || f.bits() > 14) { err = "lossy DNG needs a width divisible by 4, an even height and at most 14 bits"; return false; }
         thread_local Coefficients co;
         thread_local Result local;
         Result& r = result ? *result : local;
@@ -780,7 +798,7 @@ namespace lossy
         }
 
         const Curve& cv = curve();
-        const uint32_t tw = f.width / 4;
+        const uint32_t tw = (uint32_t)TileWidth((int)f.width);
         TiffWriter w;
         w.longs(254, {0});                                   // NewSubfileType: main image
         w.longs(256, {f.width});
@@ -803,8 +821,9 @@ namespace lossy
         w.ascii(50708, "Z CAM E2");
         w.add(50712, 3, 4096, cv.to_linear);                 // LinearizationTable: the coding curve
         w.shorts(50713, {2, 2});
-        // Black and white levels apply after linearization, in the curve's 16-bit domain (12-bit x 16)
-        w.shorts(50714, {(uint16_t)(f.black[0] * 16), (uint16_t)(f.black[1] * 16), (uint16_t)(f.black[2] * 16), (uint16_t)(f.black[3] * 16)});
+        // Black and white levels apply after linearization, in the curve's 16-bit domain (12-bit x 16, 14-bit x 4)
+        const int up = 16 - f.bits();
+        w.shorts(50714, {(uint16_t)(f.black[0] << up), (uint16_t)(f.black[1] << up), (uint16_t)(f.black[2] << up), (uint16_t)(f.black[3] << up)});
         w.longs(50717, {WhiteLevel(cv, r.scale)});
         const DngColor* c = o.color;   // the camera's own calibration, else zraw-parser's fixed matrices
         if (c) w.rationals(50721, true, std::vector<double>(c->color_matrix, c->color_matrix + 9));

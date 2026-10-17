@@ -9,7 +9,7 @@
 // Each frame's metadata rides in the unused top 4 bits of the first 32 photosites of row 0 (samples
 // are at most 12 bits), as eight 16-bit words, least significant nibble first:
 //   0..2 = AWB gains r, g, b   3 = bit depth   4..7 = black level per 2x2 CFA position (row-major)
-// Footage deeper than 12 bits has no spare bits, so it gets the half-resolution CPU preview instead.
+// 14-bit footage is shifted down to 12 bits on the way (a picture on screen doesn't need the last two).
 //
 // The shader rebuilds RGB at full resolution with Malvar-He-Cutler (a 5x5 linear demosaic that keeps
 // fine detail without zipper edges), then applies the same look as the CPU preview: white balance,
@@ -21,14 +21,17 @@
 #include <string>
 #include "preview.hpp"
 
-inline bool FullResSupported(int bits) { return bits <= 12; }
+inline bool FullResSupported(int bits) { return bits <= 14; }
 
 inline void PackFullResFrame(const ZrawFrame& f, const uint16_t* cfa, uint8_t* out)
 {
-    memcpy(out, cfa, (size_t)f.width * f.height * 2);
+    const size_t n = (size_t)f.width * f.height;
+    const int down = f.bits() > 12 ? f.bits() - 12 : 0;
+    if (down) { uint16_t* o = (uint16_t*)out; for (size_t i = 0; i < n; ++i) o[i] = (uint16_t)(cfa[i] >> down); }
+    else memcpy(out, cfa, n * 2);
     auto clamp16 = [](uint32_t v) { return (uint16_t)(v > 65535 ? 65535 : v); };
-    const uint16_t meta[8] = {clamp16(f.awb_r), clamp16(f.awb_g), clamp16(f.awb_b), (uint16_t)f.bits(),
-                              f.black[0], f.black[1], f.black[2], f.black[3]};
+    const uint16_t meta[8] = {clamp16(f.awb_r), clamp16(f.awb_g), clamp16(f.awb_b), (uint16_t)(f.bits() - down),
+                              (uint16_t)(f.black[0] >> down), (uint16_t)(f.black[1] >> down), (uint16_t)(f.black[2] >> down), (uint16_t)(f.black[3] >> down)};
     uint16_t* row0 = (uint16_t*)out;
     for (int i = 0; i < 32; ++i) row0[i] = (uint16_t)((row0[i] & 0x0FFF) | (((meta[i / 4] >> (4 * (i % 4))) & 0xF) << 12));
 }

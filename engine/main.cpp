@@ -283,6 +283,16 @@ static double clip_iso(const fs::path& clip)
     return 0;
 }
 
+// The clip's bit depth from its first frame's header (12, or 14 in the E2's 14-bit mode); 12 if unreadable
+static int clip_bits(const fs::path& clip, const ZrawTrack& z)
+{
+    FrameReader f(clip);
+    std::vector<uint8_t> data;
+    ZrawFrame fr;
+    std::string err;
+    return !z.offsets.empty() && f.read(z.offsets[0], z.sizes[0], data) && ParseZrawFrame(data.data(), data.size() - 16, fr, err) ? fr.bits() : 12;
+}
+
 #ifdef _WIN32
 // Denoise: the frames merged into frame k (k - radius .. k + radius, those inside the clip)
 static std::vector<int> dn_window(int k, int count, int r)
@@ -332,7 +342,7 @@ static bool denoise_frame_standalone(const fs::path& clip, const ZrawTrack& z, i
     fr = frs[ref];
     out.resize(cfas[ref].size());
     const double black = (fr.black[0] + fr.black[1] + fr.black[2] + fr.black[3]) / 4.0;
-    return mg.Run(slots, offs, refpos, black, nz.a, nz.floor2, o.dn, out.data());
+    return mg.Run(slots, offs, refpos, black, nz.a, nz.floor2, fr.bits(), o.dn, out.data());
 }
 #endif
 
@@ -347,7 +357,7 @@ static double quality_scale(const fs::path& clip, const ZrawTrack& z, int count,
 {
     const double iso = clip_iso(clip);
     const std::string iso_text = iso > 0 ? std::to_string((int)iso) : "unknown (using ISO 500's noise, the strictest)";
-    const lossy::Noise nz = lossy::E2Noise(iso);
+    const lossy::Noise nz = lossy::E2Noise(iso, clip_bits(clip, z));
     const double var_scale = std::pow(0.25, halvings(o));   // a 2x2 average quarters the noise variance
     const int n = std::min(8, count);
     std::vector<double> s(n, 0);
@@ -383,7 +393,7 @@ static double quality_scale(const fs::path& clip, const ZrawTrack& z, int count,
                 uint32_t W = fr.width, H = fr.height;
                 for (int h = 0; h < halvings(o); ++h) { cfa = DownscaleRawTwice(cfa, W, H); W /= 2; H /= 2; }
                 lossy::Transform(cfa.data(), (int)W, (int)H, fr.bits(), co);
-                lossy::NoiseWeights(co, nz, (fr.black[0] + fr.black[1] + fr.black[2] + fr.black[3]) / 4.0, var_scale, w);
+                lossy::NoiseWeights(co, nz, lossy::Black12(fr), var_scale, w);
                 s[i] = lossy::ScaleForQuality(co, w, o.quality);
             }
         });
@@ -423,7 +433,7 @@ static bool convert_clip(const fs::path& clip, const Options& o)
     static std::unique_ptr<gpu_denoise::Store> st_cache;
     static std::vector<std::unique_ptr<gpu_denoise::Merger>> mergers_cache;
     const int dn_r = o.dn.radius;
-    const lossy::Noise dn_noise = lossy::E2Noise(clip_iso(clip));
+    const lossy::Noise dn_noise = lossy::E2Noise(clip_iso(clip), clip_bits(clip, z));
     if (o.denoise && o.dn_device && count > 0)
     {
         uint32_t fw = 0, fh = 0;
@@ -570,7 +580,7 @@ static bool convert_clip(const fs::path& clip, const Options& o)
                 }
                 out.resize(ref->cfa.size());
                 const double black = (ref->fr.black[0] + ref->fr.black[1] + ref->fr.black[2] + ref->fr.black[3]) / 4.0;
-                const bool merged = mg->Run(slots, offs, refpos, black, dn_noise.a, dn_noise.floor2, o.dn, out.data());
+                const bool merged = mg->Run(slots, offs, refpos, black, dn_noise.a, dn_noise.floor2, ref->fr.bits(), o.dn, out.data());
                 { std::lock_guard<std::mutex> l(mm); free_mergers.push_back(mg); }
                 merger_cv.notify_one();
                 if (merged) ok = write_frame(k, ref->fr, out, err); else err = "denoise failed on the GPU";
@@ -1072,8 +1082,8 @@ static int cmd_qstudy(int argc, char** argv)
                 cfa.resize((size_t)fr.width * fr.height);
                 DecodeZrawFrame(fr, cfa.data());
                 lossy::Transform(cfa.data(), (int)fr.width, (int)fr.height, fr.bits(), co);
-                const double black = (fr.black[0] + fr.black[1] + fr.black[2] + fr.black[3]) / 4.0;
-                lossy::NoiseWeights(co, lossy::E2Noise(isos[job.clip]), black, 1.0, nm);
+                const double black = lossy::Black12(fr);
+                lossy::NoiseWeights(co, lossy::E2Noise(isos[job.clip], fr.bits()), black, 1.0, nm);
                 std::string shares;
                 for (int b = 0; b < lossy::kBands; ++b) shares += "," + std::to_string(nm.band_n[b] / (double)nm.w.size()).substr(0, 7);
                 char line[512];
