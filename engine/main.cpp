@@ -2,8 +2,8 @@
 //
 //   zrawdng convert <clip.MOV | folder>... -o <output folder> [--lossy ratio | --quality x [--min-ratio 2] [--max-ratio 8] | --lossless | --uncompressed [--pack]] [--cpu]
 //                   [--scale half|quarter] [-j threads]
-//       Writes <output>/<clip name>/track_<t>_<frame>.dng plus <clip name>.mov holding the audio and
-//       timecode tracks, the same layout zraw-parser produces.
+//       Writes <output>/<clip name>/<clip name>_<frame, 6 digits>.dng plus <clip name>.mov holding the
+//       audio and timecode tracks (--zraw-parser-exact: zraw-parser's track_<t>_<frame>.dng names).
 //       By default the DNGs are Blackmagic-style lossy CinemaDNG at 3:1 (12-bit DCT JPEG tiles, the lossy
 //       raw Resolve reads); --lossy ratio sets a different ratio (1.5 to 20) relative to 12-bit packed raw.
 //       The DCT and rate control run on the GPU when there is one; --cpu keeps them on the CPU, and
@@ -474,7 +474,14 @@ static bool convert_clip(const fs::path& clip, const Options& o)
 
     // For --delete-originals: each frame's output path, the bytes written for it, and the source clip's size before conversion
     std::vector<fs::path> dngs(count);
-    for (int i = 0; i < count; ++i) dngs[i] = dir / ("track_" + std::to_string(z.track_index) + "_" + std::to_string(i) + ".dng");
+    // Frames are named after the clip, <clip name>_000000.dng on, as Blackmagic's cameras do, so Resolve
+    // lists the sequence under the clip's name. --zraw-parser-exact keeps zraw-parser's track_<t>_<frame>.dng.
+    for (int i = 0; i < count; ++i)
+    {
+        char num[16];
+        snprintf(num, sizeof num, "_%06d.dng", i);
+        dngs[i] = o.exact ? dir / ("track_" + std::to_string(z.track_index) + "_" + std::to_string(i) + ".dng") : dir / (dir.filename().string() + num);
+    }
     std::vector<uint64_t> written(count, 0);
     const uint64_t clip_size = fs::file_size(clip, ec);
 
