@@ -239,6 +239,25 @@ inline uint64_t g_cov[8];    // lines at noise 0/1/2, raw blocks, VL blocks, blo
 #define PROF_MARK(i) do {} while (0)
 #endif
 
+// A frame deeper than 12 bits whose samples all have the extra low bits clear holds 12-bit data (the
+// E2's 14-bit mode before the user unlocked it: every value a multiple of 4). Rewrites it in place as
+// 12-bit: samples and black levels shifted down, bit depth 12. True 14-bit footage has these bits
+// evenly spread, so one set bit anywhere keeps the frame as it is. Returns whether it changed.
+inline bool StripPadding(ZrawFrame& f, uint16_t* cfa)
+{
+    const int extra = f.bits() - 12;
+    if (extra <= 0) return false;
+    const size_t n = (size_t)f.width * f.height;
+    const uint16_t mask = (uint16_t)((1 << extra) - 1);
+    uint16_t any = 0;
+    for (size_t i = 0; i < n; ++i) any |= cfa[i];
+    if (any & mask) return false;
+    for (size_t i = 0; i < n; ++i) cfa[i] >>= extra;
+    for (auto& b : f.black) b = (uint16_t)((b + (1 << (extra - 1))) >> extra);
+    f.bitdepth_code = 2;   // 8 + 2 x 2 = 12 bits
+    return true;
+}
+
 // Decodes into `cfa`, width * height values, row-major, in the original decoder's Bayer layout.
 inline void DecodeZrawFrame(const ZrawFrame& f, uint16_t* cfa)
 {

@@ -670,6 +670,10 @@ static bool convert_clip(const fs::path& clip, const Options& o)
 #endif
             // Writes frame `index` in the chosen format
             auto write_frame = [&](int index, ZrawFrame& fr, std::vector<uint16_t>& img, std::string& err) -> bool {
+                // Lossless and uncompressed: a 14-bit frame holding 12-bit data is written as 12-bit, since the
+                // padding only costs space. (Lossy files come out the same either way; zraw-parser's exact
+                // layout keeps the padding.)
+                if (o.lossy <= 0 && !o.exact) StripPadding(fr, img.data());
                 if (o.no_write && o.lossy <= 0)
                 {
                     const uint8_t* jpeg; size_t len;
