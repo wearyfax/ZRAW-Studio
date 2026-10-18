@@ -163,14 +163,14 @@ public class PlayerPage : UserControl
         lookExposure.SelectedIndexChanged += lookChanged;
         pick.Click += (s, e) =>
         {
-            using (var d = new OpenFileDialog { Multiselect = true, Title = L.T("Play in mpv"), Filter = L.T("Video files|*.mov;*.mp4;*.mkv;*.mxf;*.avi;*.zraw|All files|*.*") })
+            using (var d = new OpenFileDialog { RestoreDirectory = true, Multiselect = true, Title = L.T("Play in mpv"), Filter = L.T("Video files|*.mov;*.mp4;*.mkv;*.mxf;*.avi;*.zraw|All files|*.*") })
                 if (d.ShowDialog(this) == DialogResult.OK) Play(d.FileNames);
         };
         drop.Click += (s, e) => pick.PerformClick();
         getMpv.Click += (s, e) => { try { Process.Start(Mpv.Download); } catch (Exception ex) { Write(L.F("Could not open {0}: {1}", Mpv.Download, ex.Message)); } };
         locate.Click += (s, e) =>
         {
-            using (var d = new OpenFileDialog { Title = L.T("Where is mpv.exe?"), Filter = L.T("mpv|mpv.exe|Programs|*.exe") })
+            using (var d = new OpenFileDialog { RestoreDirectory = true, Title = L.T("Where is mpv.exe?"), Filter = L.T("mpv|mpv.exe|Programs|*.exe") })
                 if (d.ShowDialog(this) == DialogResult.OK) { Settings.Set("mpvPath", d.FileName); Settings.Save(); UpdateStatus(); }
         };
         install.Click += (s, e) =>

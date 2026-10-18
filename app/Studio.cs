@@ -492,7 +492,7 @@ static class FolderPicker
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
     static extern void SHCreateItemFromParsingName(string path, IntPtr bc, [In] ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out IShellItem item);
 
-    const uint FOS_PICKFOLDERS = 0x20, FOS_FORCEFILESYSTEM = 0x40, FOS_PATHMUSTEXIST = 0x800;
+    const uint FOS_NOCHANGEDIR = 0x8, FOS_PICKFOLDERS = 0x20, FOS_FORCEFILESYSTEM = 0x40, FOS_PATHMUSTEXIST = 0x800;
     const uint SIGDN_FILESYSPATH = 0x80058000;
 
     public static string Pick(IWin32Window owner, string title, string start)
@@ -500,7 +500,7 @@ static class FolderPicker
         var d = (IFileOpenDialog)new FileOpenDialog();
         try
         {
-            d.SetOptions(FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+            d.SetOptions(FOS_NOCHANGEDIR | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
             d.SetTitle(title);
             if (!string.IsNullOrEmpty(start) && Directory.Exists(start))
             {

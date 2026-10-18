@@ -239,7 +239,7 @@ public class ConvertPage : UserControl
 
         add.Click += (s, e) =>
         {
-            using (var d = new OpenFileDialog { Multiselect = true, Filter = L.T("Z CAM clips (*.mov, *.zraw)|*.mov;*.zraw|All files|*.*"), Title = L.T("Add ZRAW clips") })
+            using (var d = new OpenFileDialog { RestoreDirectory = true, Multiselect = true, Filter = L.T("Z CAM clips (*.mov, *.zraw)|*.mov;*.zraw|All files|*.*"), Title = L.T("Add ZRAW clips") })
                 if (d.ShowDialog(this) == DialogResult.OK) Add(d.FileNames);
         };
         addFolder.Click += (s, e) =>
@@ -604,7 +604,8 @@ public class ConvertPage : UserControl
         if (todo.Count == 0) { Write(L.T("Nothing to convert: add ZRAW clips first.")); return; }
         string outDir = output.Text.Trim();
         if (outDir.Length == 0) { Write(L.T("ERROR: choose an output folder.")); return; }
-        try { Directory.CreateDirectory(outDir); } catch (Exception ex) { Write(L.F("ERROR: cannot create {0}: {1}", outDir, ex.Message)); return; }
+        // Absolute, so the engine, the existing-conversion check and Open all mean the same folder whatever the current directory is
+        try { outDir = Path.GetFullPath(outDir); Directory.CreateDirectory(outDir); } catch (Exception ex) { Write(L.F("ERROR: cannot create {0}: {1}", outDir, ex.Message)); return; }
         string engine;
         try { engine = Embedded.Engine(); } catch (Exception ex) { Write(L.F("ERROR: {0}", ex.Message)); return; }
 
@@ -729,7 +730,9 @@ public class ConvertPage : UserControl
         return sb.ToString();
     }
 
-    static string Quote(string s) { return "\"" + s.TrimEnd('\\') + "\""; }
+    // Backslashes before the closing quote are doubled, or the command line reads \" as a quote: "D:\\" reaches the
+    // engine as D:\ (trimming it gave "D:", a relative path)
+    static string Quote(string s) { return "\"" + s + new string('\\', s.Length - s.TrimEnd('\\').Length) + "\""; }
 
     void NextBatch(string engine, string outDir)
     {
