@@ -626,12 +626,26 @@ public class ConvertPage : UserControl
         var existing = todo.Where(c =>
         {
             string name = Path.GetFileNameWithoutExtension(c.Path), d = Path.Combine(outDir, name);
-            return Directory.Exists(d) && (c.Info.Hevc ? File.Exists(Path.Combine(d, name + ".mov")) : Directory.EnumerateFiles(d, "*.dng").Any());
+            return Directory.Exists(d) && (File.Exists(Path.Combine(d, name + ".mov")) || Directory.EnumerateFiles(d, "*.dng").Any());
         }).ToList();
+        // "Skip already converted" skips only complete conversions: every frame plus the .mov the engine writes
+        // last. A stopped or failed run leaves less, and that still goes to the dialog.
+        if (skipConverted.Checked)
+        {
+            var complete = existing.Where(c =>
+            {
+                string name = Path.GetFileNameWithoutExtension(c.Path), d = Path.Combine(outDir, name);
+                return File.Exists(Path.Combine(d, name + ".mov")) && (c.Info.Hevc || Directory.EnumerateFiles(d, "*.dng").Count() >= c.Info.Frames);
+            }).ToList();
+            foreach (var c in complete) Set(c, L.T("Skipped: already converted"), Z.Dim, "");
+            if (complete.Count > 0) Write(L.F("Skipping {0} {0:clip|clips} already converted into {1}.", complete.Count, outDir));
+            todo = todo.Except(complete).ToList();
+            existing = existing.Except(complete).ToList();
+            if (todo.Count == 0) { Write(L.F("Nothing to convert: every clip was already converted into {0}.", outDir)); return; }
+        }
         if (existing.Count > 0)
         {
-            // With "Skip already converted ZRAW clips" ticked, skip them without asking
-            var answer = skipConverted.Checked ? DialogResult.No : MessageBox.Show(this,
+            var answer = MessageBox.Show(this,
                 L.F("{0} of these clips {0:was|were} already converted into {1}:\n\n{2}\n\nYes: overwrite them.\nNo: skip those clips and convert the rest.\nCancel: do nothing.",
                     existing.Count, outDir, string.Join("\n", existing.Take(8).Select(c => Path.GetFileNameWithoutExtension(c.Path))) + (existing.Count > 8 ? "\n..." : "")),
                 L.T("ZRAW Studio: existing conversions"), MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -640,7 +654,6 @@ public class ConvertPage : UserControl
             {
                 foreach (var c in existing) Set(c, L.T("Skipped: already converted"), Z.Dim, "");
                 todo = todo.Except(existing).ToList();
-                if (skipConverted.Checked) Write(L.F("Skipping {0} {0:clip|clips} already converted into {1}.", existing.Count, outDir));
                 if (todo.Count == 0) { Write(L.F("Nothing to convert: every clip was already converted into {0}.", outDir)); return; }
             }
         }
