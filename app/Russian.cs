@@ -166,6 +166,7 @@ static partial class L
         { "ZRAW Studio: existing conversions", "ZRAW Studio: клипы уже сконвертированы" },
         { "Skipped: already converted", "Пропущен: уже сконвертирован" },
         { "Skipping {0} {0:clip|clips} already converted into {1}.", "{0:Пропущен|Пропущено|Пропущено} {0} {0:клип|клипа|клипов}, уже {0:сконвертированный|сконвертированных|сконвертированных} в {1}." },
+        { "Skipping {0}: converting it into {1} would overwrite the clip with its own audio file. Choose another output folder.", "{0} пропущен: при конвертации в {1} клип был бы перезаписан собственным аудиофайлом. Выберите другую папку для результата." },
         { "Nothing to convert: every clip was already converted into {0}.", "Нечего конвертировать: все клипы уже сконвертированы в {0}." },
         { "Waiting", "В очереди" },
         { "Converting {0} {0:clip|clips} to {1} as {2}", "Конвертация {0} {0:клипа|клипов|клипов} в {1}, формат «{2}»" },
@@ -332,6 +333,7 @@ static partial class L
         // Engine's skip reasons and the Tagger's statuses
         { "not a ZRAW clip", "это не клип ZRAW" },
         { "unrecognized HEVC ZRAW variant", "неизвестный HEVC ZRAW" },
+        { "the output would overwrite the clip", "результат записался бы поверх клипа" },
         { "tagged", "помечен" },
         { "to rename", "нужно переименовать" },
         { "WARNING: has a ZRAW_ name but is not ZRAW", "ВНИМАНИЕ: имя с ZRAW_, но клип не ZRAW" },

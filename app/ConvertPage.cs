@@ -608,6 +608,20 @@ public class ConvertPage : UserControl
         string engine;
         try { engine = Embedded.Engine(); } catch (Exception ex) { Write(L.F("ERROR: {0}", ex.Message)); return; }
 
+        // The engine ends each clip with <output>\<clip name>\<clip name>.mov; that must not be the clip itself
+        var self = todo.Where(c =>
+        {
+            string name = Path.GetFileNameWithoutExtension(c.Path);
+            return string.Equals(Path.GetFullPath(Path.Combine(outDir, name, name + ".mov")), Path.GetFullPath(c.Path), StringComparison.OrdinalIgnoreCase);
+        }).ToList();
+        foreach (var c in self)
+        {
+            Set(c, L.F("Skipped: {0}", L.T("the output would overwrite the clip")), Z.Dim, "");
+            Write(L.F("Skipping {0}: converting it into {1} would overwrite the clip with its own audio file. Choose another output folder.", Path.GetFileName(c.Path), outDir));
+        }
+        todo = todo.Except(self).ToList();
+        if (todo.Count == 0) return;
+
         // Never replace an earlier conversion without asking: the engine overwrites <output>\<clip name>\
         var existing = todo.Where(c =>
         {

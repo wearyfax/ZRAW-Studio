@@ -411,6 +411,10 @@ static bool convert_clip(const fs::path& clip, const Options& o)
     TinyMovFileReader mov_reader;
     auto mov = mov_reader.OpenMovFile(clip.string());
     auto z = FindZrawTrack(mov);
+    // Both paths end by writing <output>/<stem>/<stem>.mov; if that is the clip itself, it would be truncated
+    const std::string stem = clip.stem().string();
+    std::error_code same_ec;
+    if (fs::equivalent(clip, o.out / stem / (stem + ".mov"), same_ec)) return skip_clip(clip, o, "the output would overwrite the clip");
     if (z.track_index >= 0 && z.version == 0x45A32DEF) return convert_hevc_clip(clip, mov, z, o);
     if (!is_true_raw(z)) return skip_clip(clip, o, "not a ZRAW clip");
 
