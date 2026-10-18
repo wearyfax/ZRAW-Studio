@@ -243,7 +243,7 @@ private:
         if (hm < 0x2000 || hm > 0x8000) hm = 0x4000;
         if (hm > L.sizes[i]) hm = L.sizes[i];
         if (i == L.count - 1 && L.sizes[i] - hm < 4) hm = L.sizes[i] - 4;
-        return hm;
+        return hm < 4 ? 4 : hm;   // a last NAL unit of 5 to 7 bytes: nothing to XOR (hm - 4 must not wrap)
     }
 
     // Descrambles a stored frame into NAL units with 4-byte big-endian lengths
