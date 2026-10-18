@@ -25,6 +25,7 @@
 #endif
 #include "zraw.hpp"
 #include "camera_color.hpp"
+#include "movparse.hpp"
 #include "bitwriter.hpp"
 
 namespace lossy
@@ -765,6 +766,7 @@ namespace lossy
     }
 
     struct Options { double ratio = 3.0; uint32_t fps_num = 0, fps_den = 0; const DngColor* color = nullptr;   // color: camera_color.hpp
+                     const ClipTimecode* tc = nullptr; uint32_t frame = 0;                       // timecode of the clip's first frame, this frame's number
                      double quality_scale = 0, min_ratio = 2, max_ratio = 8; };   // quality_scale > 0: fixed quality, within the ratio caps
 
     // Encodes one frame and writes it as a lossy CinemaDNG. `state` carries the quantization
@@ -839,6 +841,13 @@ namespace lossy
         if (!c) w.shorts(50779, {21});
         if (c) w.rationals(50964, true, std::vector<double>(c->forward_matrix, c->forward_matrix + 9));   // ForwardMatrix1
         if (o.fps_num && o.fps_den) { int32_t fr[2] = {(int32_t)o.fps_num, (int32_t)o.fps_den}; w.add(51044, 10, 1, fr); }   // FrameRate
+        if (o.tc && o.tc->ok)
+        {
+            uint8_t code[8];
+            TimecodeBytes(*o.tc, o.frame, code);
+            w.add(51043, 1, 8, code);                                              // TimeCodes
+            if (!o.tc->reel.empty()) w.ascii(51081, o.tc->reel.c_str());           // ReelName
+        }
         return w.write(path, r.tile, 4, written, err);
     }
 }

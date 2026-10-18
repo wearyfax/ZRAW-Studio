@@ -7,7 +7,9 @@
 | `mpv/include/` | [mpv](https://github.com/mpv-player/mpv) client API headers | ISC |
 | ReaLTaiizor 3.8.2.1 | [Taiizor/ReaLTaiizor](https://github.com/Taiizor/ReaLTaiizor), downloaded from NuGet by `build.bat` and embedded in the exe | MIT, see `ReaLTaiizor-LICENSE.txt` |
 
-The two headers are unmodified and match the versions zraw-parser 0.11.0-alpha uses.
+Both headers match the versions zraw-parser 0.11.0-alpha uses. `tiny_dng_writer.h` has one addition,
+`DNGImage::SetCustomField`, which writes any tag; zrawdng uses it for the CinemaDNG timecode, frame
+rate and reel name tags. `TinyMovFileLibrary.hpp` is unmodified.
 
 `zrawdng play` loads `libmpv-2.dll` at run time. To use it, put `libmpv-2.dll` from a
 [shinchiro/mpv-winbuild-cmake](https://github.com/shinchiro/mpv-winbuild-cmake/releases) `mpv-dev-x86_64-v3`

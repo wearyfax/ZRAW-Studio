@@ -4,7 +4,9 @@
 #pragma once
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 #ifdef _WIN32
@@ -148,6 +150,78 @@ inline std::vector<std::pair<std::string, std::string>> ReadClipMeta(const std::
     }
     return out;
 }
+
+// The clip's start timecode, from its QuickTime timecode track ('tmcd'): the frame count in its one
+// sample, the timecode's frame base (24 for 23.976 footage), whether it is drop-frame, and the reel
+// name from the sample description. Z CAM records one per clip; video frame i is start + i.
+struct ClipTimecode { bool ok = false; uint32_t start = 0, base = 0; bool drop = false; std::string reel; };
+
+inline ClipTimecode ReadTimecode(const std::filesystem::path& path)
+{
+    using namespace movparse_detail;
+    ClipTimecode tc;
+    std::vector<uint8_t> moov;
+    std::string err;
+    if (!LoadMoov(path, moov, err)) return tc;
+    for (auto& trak : children(moov.data(), moov.size()))
+    {
+        if (memcmp(trak.type, "trak", 4)) continue;
+        auto t = children(trak.body, trak.size);
+        const Atom* mdia = find(t, "mdia");
+        if (!mdia) continue;
+        auto md = children(mdia->body, mdia->size);
+        const Atom *hdlr = find(md, "hdlr"), *minf = find(md, "minf");
+        if (!hdlr || !minf || hdlr->size < 12 || memcmp(hdlr->body + 8, "tmcd", 4)) continue;
+        auto mi = children(minf->body, minf->size);
+        const Atom* stbl = find(mi, "stbl");
+        if (!stbl) continue;
+        auto st = children(stbl->body, stbl->size);
+        const Atom *stsd = find(st, "stsd"), *stco = find(st, "stco"), *co64 = find(st, "co64");
+        // Sample description: size, 'tmcd', 6 reserved, data reference (2), 4 reserved, flags (4),
+        // timescale (4), frame duration (4), frames per second (1), 1 reserved, then a 'name' atom
+        if (!stsd || (!stco && !co64) || stsd->size < 8 + 34 || memcmp(stsd->body + 12, "tmcd", 4)) continue;
+        const uint8_t* e = stsd->body + 8;
+        const uint32_t esize = be32(e);
+        if (esize < 34 || 8ull + esize > stsd->size) continue;   // 64-bit: 8 + 0xFFFFFFF8 wraps to 0
+        tc.drop = (be32(e + 20) & 1) != 0;
+        tc.base = e[32];
+        for (auto& k : children(e + 34, esize - 34))
+            if (!memcmp(k.type, "name", 4) && k.size >= 4)
+                tc.reel.assign((const char*)k.body + 4, std::min<size_t>(k.size - 4, ((size_t)k.body[0] << 8) | k.body[1]));
+        const Atom* co = co64 ? co64 : stco;
+        if (co->size < 12 || be32(co->body + 4) == 0) continue;
+        const uint64_t off = co64 ? be64(co->body + 8) : be32(co->body + 8);
+        std::ifstream f(path, std::ios::binary);
+        uint8_t sample[4];
+        if (!f.seekg((std::streamoff)off) || !f.read((char*)sample, 4)) continue;
+        tc.start = be32(sample);
+        tc.ok = tc.base > 0;
+        return tc;
+    }
+    return tc;
+}
+
+// Video frame `frame` of a clip as an 8-byte SMPTE 12M timecode, the layout of the DNG TimeCodes tag:
+// frames, seconds, minutes, hours in BCD (drop-frame flag in bit 6 of the frames byte), then 4 bytes
+// of user bits, left zero.
+inline void TimecodeBytes(const ClipTimecode& tc, uint32_t frame, uint8_t out[8])
+{
+    const uint64_t base = tc.base;
+    uint64_t n = (uint64_t)tc.start + frame;
+    if (tc.drop && base % 30 == 0)   // 29.97 / 59.94 drop-frame: skip 2 (4) frame numbers each minute, except every tenth
+    {
+        const uint64_t d = base / 15, per10 = base * 600 - 9 * d, per1 = base * 60 - d, tens = n / per10, rem = n % per10;
+        n += 9 * d * tens + (rem > d ? d * ((rem - d) / per1) : 0);
+    }
+    const uint32_t ff = (uint32_t)(n % base), ss = (uint32_t)(n / base % 60), mm = (uint32_t)(n / (base * 60) % 60), hh = (uint32_t)(n / (base * 3600) % 24);
+    auto bcd = [](uint32_t v) { return (uint8_t)((v / 10) << 4 | (v % 10)); };
+    out[0] = (uint8_t)(bcd(ff) | (tc.drop ? 0x40 : 0));
+    out[1] = bcd(ss); out[2] = bcd(mm); out[3] = bcd(hh);
+    out[4] = out[5] = out[6] = out[7] = 0;
+}
+
+// What a DNG frame carries about time (zrawdng writes it unless --zraw-parser-exact)
+struct FrameStamp { const ClipTimecode* tc = nullptr; uint32_t frame = 0, fps_num = 0, fps_den = 0; };
 
 // Finds the first video track whose single sample description is 'zraw' with a 'zraw' extension.
 inline bool ParseZrawMov(const std::filesystem::path& path, MovZraw& out, std::string& err)

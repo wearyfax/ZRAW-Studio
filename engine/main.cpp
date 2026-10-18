@@ -181,7 +181,7 @@ static int halvings(const Options& o) { return o.scale == DngScale::Half ? 1 : o
 // quality_scale > 0: the clip's fixed-quality scale (quality_scale below).
 static bool write_lossy(const std::string& path, const ZrawFrame& f, std::vector<uint16_t>& cfa, const Options& o,
                         const ZrawTrack& z, lossy::RateState& rate, std::string& err, uint64_t* written, lossy::Backend* backend,
-                        double quality_scale)
+                        double quality_scale, const ClipTimecode* tc, int index)
 {
     ZrawFrame g = f;
     for (int i = 0; i < halvings(o); ++i)
@@ -193,6 +193,8 @@ static bool write_lossy(const std::string& path, const ZrawFrame& f, std::vector
     lo.max_ratio = o.max_ratio;
     lo.fps_num = z.timescale;
     lo.fps_den = z.frame_duration;
+    lo.tc = tc;
+    lo.frame = (uint32_t)index;
     DngColor color;
     if (FrameDngColor(f, o.color, color)) lo.color = &color;   // else zraw-parser's fixed matrices
     if (lossy::WriteLossyDng(path, g, cfa.data(), lo, rate, err, written, nullptr, backend)) return true;
@@ -473,6 +475,14 @@ static bool convert_clip(const fs::path& clip, const Options& o)
     const bool dn = st != nullptr;
     const double qscale = o.lossy > 0 && o.quality > 0 ? quality_scale(clip, z, count, o, st, dn ? mergers[0] : nullptr) : 0;
 
+    // The camera's start timecode, written into every DNG (frame i gets start + i)
+    const ClipTimecode tc = ReadTimecode(clip);
+    if (tc.ok && !o.progress && !o.exact)
+    {
+        uint8_t b[8];
+        TimecodeBytes(tc, 0, b);
+        fprintf(stderr, "timecode %02x:%02x:%02x:%02x%s, reel %s\n", b[3], b[2], b[1], b[0] & 0x3F, tc.drop ? " drop-frame" : "", tc.reel.empty() ? "none" : tc.reel.c_str());
+    }
     // For --delete-originals: each frame's output path, the bytes written for it, and the source clip's size before conversion
     std::vector<fs::path> dngs(count);
     // Frames are named after the clip, <clip name>_000000.dng on, as Blackmagic's cameras do, so Resolve
@@ -689,10 +699,11 @@ static bool convert_clip(const fs::path& clip, const Options& o)
                     return true;
                 }
                 const std::string path = dngs[index].string();
-                if (o.lossy > 0) return write_lossy(o.no_write ? kNullFile : path, fr, img, o, z, rate, err, &written[index], gpu, qscale);
+                if (o.lossy > 0) return write_lossy(o.no_write ? kNullFile : path, fr, img, o, z, rate, err, &written[index], gpu, qscale, &tc, index);
                 DngColor color;
                 const bool own = FrameDngColor(fr, o.color, color);
-                return WriteDng(path, fr, img, o.storage, o.scale, err, &written[index], own ? &color : nullptr, o.exact);
+                const FrameStamp stamp{&tc, (uint32_t)index, z.timescale, z.frame_duration};
+                return WriteDng(path, fr, img, o.storage, o.scale, err, &written[index], own ? &color : nullptr, o.exact, &stamp);
             };
 #ifdef _WIN32
             if (dn) { denoise_worker(write_frame); return; }

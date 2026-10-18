@@ -810,6 +810,8 @@ class DNGImage {
   /// Set custom field.
   bool SetCustomFieldLong(const unsigned short tag, const int value);
   bool SetCustomFieldULong(const unsigned short tag, const unsigned int value);
+  // ZRAW Studio addition: any tag, `count` values of TIFF `type` (little-endian data as given)
+  bool SetCustomField(const unsigned short tag, const unsigned short type, const unsigned int count, const void *data);
 
   size_t GetDataSize() const { return data_os_.str().length(); }
 
@@ -2263,6 +2265,16 @@ bool DNGImage::SetCustomFieldULong(const unsigned short tag,
     return false;
   }
 
+  num_fields_++;
+  return true;
+}
+
+bool DNGImage::SetCustomField(const unsigned short tag, const unsigned short type,
+                              const unsigned int count, const void *data) {
+  if (!WriteTIFFTag(tag, type, count, reinterpret_cast<const unsigned char *>(data),
+                    &ifd_tags_, &data_os_)) {
+    return false;
+  }
   num_fields_++;
   return true;
 }

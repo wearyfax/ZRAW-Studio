@@ -13,6 +13,7 @@
 #endif
 #include "zraw.hpp"
 #include "camera_color.hpp"
+#include "movparse.hpp"
 
 #define TINY_DNG_WRITER_IMPLEMENTATION
 #include <tiny_dng_writer.h>
@@ -119,8 +120,23 @@ inline std::vector<uint16_t> DownscaleRawTwice(const std::vector<uint16_t>& img,
 // `color` (camera_color.hpp) replaces the two fixed matrices with one calibration (ColorMatrix1 plus
 // ForwardMatrix1). `exact`: also use zraw-parser's white level, for byte comparisons (zrawdng
 // --zraw-parser-exact).
+// Timecode, frame rate and reel name (CinemaDNG tags TimeCodes, FrameRate, ReelName), so Resolve gives
+// the sequence the camera's timecode. ReelName is only written when there is one.
+inline void SetDngTimeTags(tinydngwriter::DNGImage& img, const FrameStamp& s)
+{
+    if (s.fps_num && s.fps_den) { int32_t fr[2] = {(int32_t)s.fps_num, (int32_t)s.fps_den}; img.SetCustomField(51044, tinydngwriter::TIFF_SRATIONAL, 1, fr); }
+    if (!s.tc || !s.tc->ok) return;
+    uint8_t code[8];
+    TimecodeBytes(*s.tc, s.frame, code);
+    img.SetCustomField(51043, tinydngwriter::TIFF_BYTE, 8, code);
+    if (s.tc->reel.empty()) return;
+    std::string reel = s.tc->reel;
+    reel.resize(std::max<size_t>(reel.size() + 1, 4), '\0');   // with its null; the writer can't store a 3-byte value
+    img.SetCustomField(51081, tinydngwriter::TIFF_ASCII, (unsigned)reel.size(), reel.data());
+}
+
 inline void SetDngTags(tinydngwriter::DNGImage& img, const ZrawFrame& f, uint32_t w, uint32_t h, DngStorage storage, const DngColor* color = nullptr,
-                       bool exact = false)
+                       bool exact = false, const FrameStamp* stamp = nullptr)
 {
     img.SetBigEndian(false);
     img.SetSubfileType(false, false, false);
@@ -177,17 +193,18 @@ inline void SetDngTags(tinydngwriter::DNGImage& img, const ZrawFrame& f, uint32_
            // standard LONG. At 4095, clipped photosites sit just under white and Resolve's highlight recovery
            // never treats them as clipped.
         img.SetCustomFieldULong(50717, (1u << f.bits()) - 2);
+    if (stamp && !exact) SetDngTimeTags(img, *stamp);
 }
 
 inline bool WriteDng(const std::string& path, const ZrawFrame& f, std::vector<uint16_t>& cfa, DngStorage storage, DngScale scale, std::string& err,
-                     uint64_t* written = nullptr, const DngColor* color = nullptr, bool exact = false)
+                     uint64_t* written = nullptr, const DngColor* color = nullptr, bool exact = false, const FrameStamp* stamp = nullptr)
 {
     uint32_t w = f.width, h = f.height;
     for (int i = 0; i < (scale == DngScale::Half ? 1 : scale == DngScale::Quarter ? 2 : 0); ++i)
         cfa = DownscaleRawTwice(cfa, w, h);
 
     tinydngwriter::DNGImage img;
-    SetDngTags(img, f, w, h, storage, color, exact);
+    SetDngTags(img, f, w, h, storage, color, exact, stamp);
 
     if (storage != DngStorage::LosslessJpeg)
     {
