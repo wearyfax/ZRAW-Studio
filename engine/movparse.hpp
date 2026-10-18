@@ -180,7 +180,7 @@ inline bool ParseZrawMov(const std::filesystem::path& path, MovZraw& out, std::s
         if (be32(stsd->body + 4) != 1 || memcmp(stsd->body + 12, "zraw", 4)) continue;
         uint32_t entry_size = be32(stsd->body + 8);
         const size_t visual_fields = 78;   // VisualSampleEntry fields after the 8-byte header
-        if (entry_size < 8 + visual_fields || 8 + entry_size > stsd->size) continue;
+        if (entry_size < 8 + visual_fields || 8ull + entry_size > stsd->size) continue;   // 64-bit: 8 + 0xFFFFFFF8 wraps to 0
         auto kids = children(stsd->body + 8 + 8 + visual_fields, entry_size - 8 - visual_fields);
         const Atom* ext = find(kids, "zraw");
         if (!ext || ext->size < 4) continue;

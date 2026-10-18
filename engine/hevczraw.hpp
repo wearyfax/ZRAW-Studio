@@ -400,7 +400,7 @@ private:
             const Atom* stsd = find(s, "stsd");
             if (!stsd || stsd->size < 16 + 78 || be32(stsd->body + 4) != 1 || memcmp(stsd->body + 12, "zraw", 4)) continue;
             uint32_t entry = be32(stsd->body + 8);
-            if (entry < 8 + 78 || 8 + entry > stsd->size) continue;
+            if (entry < 8 + 78 || 8ull + entry > stsd->size) continue;   // 64-bit: 8 + 0xFFFFFFF8 wraps to 0
             auto kids = children(stsd->body + 16 + 78, entry - 8 - 78);
             const Atom* ext = find(kids, "zraw");
             if (!ext || ext->size < 4) continue;
@@ -514,7 +514,8 @@ private:
         for (auto& a : children(stbl.body, stbl.size))
         {
             std::vector<uint8_t> b;
-            if (!memcmp(a.type, "stsd", 4))
+            // Checked like Open's: a sample description that doesn't fit its atom is copied unchanged
+            if (!memcmp(a.type, "stsd", 4) && a.size >= 16 + 78 && be32(a.body + 8) >= 8 + 78 && 8ull + be32(a.body + 8) <= a.size)
             {
                 // 'hev1' entry: same visual fields and children, with hvcC in place of the 'zraw' box
                 const uint8_t* e = a.body + 8;
