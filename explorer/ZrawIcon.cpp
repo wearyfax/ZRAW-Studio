@@ -119,9 +119,11 @@ static bool ReadMoov(Source& src, std::vector<BYTE>& moov)
 struct Box { const BYTE* p = nullptr; size_t n = 0; };   // atom payload
 struct Track { bool zraw = false; Box stsz, stco, co64, stsc; };
 
-// moov > trak > mdia > minf > stbl > (stsd, stsz, stco/co64, stsc)
-static void Walk(const BYTE* b, size_t p, size_t end, std::vector<Track>& tracks)
+// moov > trak > mdia > minf > stbl > (stsd, stsz, stco/co64, stsc). A real file nests four deep; the depth limit
+// keeps a crafted file of nested boxes from overflowing the stack inside explorer.exe, which no catch can stop.
+static void Walk(const BYTE* b, size_t p, size_t end, std::vector<Track>& tracks, int depth = 0)
 {
+    if (depth > 8) return;
     while (p + 8 <= end)
     {
         UINT64 size = BE(b + p, 4); size_t hdr = 8;
@@ -130,8 +132,8 @@ static void Walk(const BYTE* b, size_t p, size_t end, std::vector<Track>& tracks
         if (size < hdr || size > end - p) return;
         const BYTE* t = b + p + 4;
         Box box; box.p = b + p + hdr; box.n = (size_t)size - hdr;
-        if (!memcmp(t, "trak", 4)) { tracks.emplace_back(); Walk(b, p + hdr, p + (size_t)size, tracks); }
-        else if (!memcmp(t, "mdia", 4) || !memcmp(t, "minf", 4) || !memcmp(t, "stbl", 4)) Walk(b, p + hdr, p + (size_t)size, tracks);
+        if (!memcmp(t, "trak", 4)) { tracks.emplace_back(); Walk(b, p + hdr, p + (size_t)size, tracks, depth + 1); }
+        else if (!memcmp(t, "mdia", 4) || !memcmp(t, "minf", 4) || !memcmp(t, "stbl", 4)) Walk(b, p + hdr, p + (size_t)size, tracks, depth + 1);
         else if (!tracks.empty())
         {
             Track& tr = tracks.back();
