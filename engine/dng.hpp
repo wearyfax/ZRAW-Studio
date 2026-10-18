@@ -155,7 +155,8 @@ inline void SetDngTags(tinydngwriter::DNGImage& img, const ZrawFrame& f, uint32_
     img.SetYResolution(300.0);
     img.SetOrientation(tinydngwriter::ORIENTATION_TOPLEFT);
     img.SetResolutionUnit(tinydngwriter::RESUNIT_NONE);
-    img.SetImageDescription("[Storyboard Creativity] ZRAW -> DNG converter generated image.");
+    // zraw-parser's description in --zraw-parser-exact files, so they stay byte-identical; ours otherwise
+    img.SetImageDescription(exact ? "[Storyboard Creativity] ZRAW -> DNG converter generated image." : "[ZRAW STUDIO] ZRAW -> DNG converter generated image");
     img.SetUniqueCameraModel("Z CAM E2");   // the original hard-codes E2 too; the model could be read from the MOV metadata
 
     if (color)

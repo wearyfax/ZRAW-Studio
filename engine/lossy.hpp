@@ -809,7 +809,7 @@ namespace lossy
         w.shorts(258, {12});
         w.shorts(259, {7});                                  // JPEG
         w.shorts(262, {32803});                              // CFA
-        w.ascii(270, "[Storyboard Creativity] ZRAW -> DNG converter generated image.");
+        w.ascii(270, "[ZRAW STUDIO] ZRAW -> DNG converter generated image");
         w.shorts(274, {1});
         w.shorts(277, {1});
         w.rationals(282, false, {300.0});
