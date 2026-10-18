@@ -183,7 +183,7 @@ static int halvings(const Options& o) { return o.scale == DngScale::Half ? 1 : o
 // quality_scale > 0: the clip's fixed-quality scale (quality_scale below).
 static bool write_lossy(const std::string& path, const ZrawFrame& f, std::vector<uint16_t>& cfa, const Options& o,
                         const ZrawTrack& z, lossy::RateState& rate, std::string& err, uint64_t* written, lossy::Backend* backend,
-                        double quality_scale, const ClipTimecode* tc, int index)
+                        double quality_scale, const ClipTimecode* tc, const ClipShot* shot, int index)
 {
     ZrawFrame g = f;
     for (int i = 0; i < halvings(o); ++i)
@@ -196,6 +196,7 @@ static bool write_lossy(const std::string& path, const ZrawFrame& f, std::vector
     lo.fps_num = z.timescale;
     lo.fps_den = z.frame_duration;
     lo.tc = tc;
+    lo.shot = shot;
     lo.frame = (uint32_t)index;
     DngColor color;
     if (FrameDngColor(f, o.color, color)) lo.color = &color;   // else zraw-parser's fixed matrices
@@ -479,6 +480,7 @@ static bool convert_clip(const fs::path& clip, const Options& o)
 
     // The camera's start timecode, written into every DNG (frame i gets start + i)
     const ClipTimecode tc = ReadTimecode(clip);
+    const ClipShot shot = ReadClipShot(clip, z.timescale, z.frame_duration);   // lens, f-number, ISO, shutter, for every DNG
     if (tc.ok && !o.progress && !o.exact)
     {
         uint8_t b[8];
@@ -724,10 +726,10 @@ static bool convert_clip(const fs::path& clip, const Options& o)
                     return true;
                 }
                 const std::string path = dngs[index].string();
-                if (o.lossy > 0) return write_lossy(o.no_write ? kNullFile : path, fr, img, o, z, rate, err, &written[index], gpu, qscale, &tc, index);
+                if (o.lossy > 0) return write_lossy(o.no_write ? kNullFile : path, fr, img, o, z, rate, err, &written[index], gpu, qscale, &tc, &shot, index);
                 DngColor color;
                 const bool own = FrameDngColor(fr, o.color, color);
-                const FrameStamp stamp{&tc, (uint32_t)index, z.timescale, z.frame_duration};
+                const FrameStamp stamp{&tc, (uint32_t)index, z.timescale, z.frame_duration, &shot};
                 return WriteDng(path, fr, img, o.storage, o.scale, err, &written[index], own ? &color : nullptr, o.exact, &stamp);
             };
 #ifdef _WIN32

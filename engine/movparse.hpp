@@ -3,6 +3,8 @@
 // mpv's terminal. Seeks over mdat, so it reads only the moov atom (Z CAM writes it at the end).
 #pragma once
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <algorithm>
 #include <filesystem>
@@ -220,8 +222,78 @@ inline void TimecodeBytes(const ClipTimecode& tc, uint32_t frame, uint8_t out[8]
     out[4] = out[5] = out[6] = out[7] = 0;
 }
 
-// What a DNG frame carries about time (zrawdng writes it unless --zraw-parser-exact)
-struct FrameStamp { const ClipTimecode* tc = nullptr; uint32_t frame = 0, fps_num = 0, fps_den = 0; };
+// How the clip was shot, from its metadata, for reference in the DNGs: lens name, focal length,
+// f-number and focus distance (only with an electronic lens), ISO and shutter. Z CAM records these
+// once per clip, so every frame gets the same values; 0 or empty means not recorded.
+struct ClipShot { std::string lens; double focal_mm = 0, fnumber = 0, focus_mm = 0; uint32_t iso = 0, shutter_num = 0, shutter_den = 0; };
+
+inline ClipShot ReadClipShot(const std::filesystem::path& path, uint32_t fps_num, uint32_t fps_den)
+{
+    ClipShot s;
+    double angle = 0;
+    for (auto& kv : ReadClipMeta(path))
+    {
+        const std::string& v = kv.second;
+        const char* c = v.c_str();
+        if (kv.first == "lensType") s.lens = v;
+        else if (kv.first == "lensFocalLength") s.focal_mm = atof(c);                         // "24mm"
+        else if (kv.first == "aperture") s.fnumber = atof(c + (c[0] == 'F' || c[0] == 'f'));   // "F4.5"
+        else if (kv.first == "focusDistance") s.focus_mm = atof(c);                           // "595mm", 327675 = infinity
+        else if (kv.first == "iso") s.iso = (uint32_t)atoi(c);
+        else if (kv.first == "shutterSpeed")                                                  // "1/60"
+        {
+            unsigned n = 0, d = 0;
+            if (sscanf(c, "%u/%u", &n, &d) == 2 && n && d) { s.shutter_num = n; s.shutter_den = d; }
+            else if (atof(c) > 0) { s.shutter_num = (uint32_t)(atof(c) * 1000 + 0.5); s.shutter_den = 1000; }
+        }
+        else if (kv.first == "shutterAngle") angle = atof(c);                                // "180°"
+    }
+    if (!s.shutter_den && angle > 0 && fps_num && fps_den)   // exposure = angle / 360 / fps
+    {
+        s.shutter_num = (uint32_t)(angle * 10 + 0.5) * fps_den;
+        s.shutter_den = 3600u * fps_num;
+    }
+    return s;
+}
+
+// A finished TIFF tag (little-endian data), for either DNG writer
+struct RawTag { uint16_t tag, type; uint32_t count; std::vector<uint8_t> data; };
+
+// The clip's shooting settings as standard EXIF / TIFF-EP tags in the DNG's main IFD: ExposureTime
+// (33434), FNumber (33437), ISOSpeedRatings (34855), SubjectDistance (37382, focus distance in m),
+// FocalLength (37386) and LensModel (42036). Only the ones the clip recorded.
+inline std::vector<RawTag> ShotTags(const ClipShot& s)
+{
+    std::vector<RawTag> t;
+    auto rational = [&](uint16_t tag, uint32_t num, uint32_t den) {
+        RawTag r{tag, 5, 1, std::vector<uint8_t>(8)};
+        memcpy(r.data.data(), &num, 4); memcpy(r.data.data() + 4, &den, 4);
+        t.push_back(r);
+    };
+    if (s.shutter_num && s.shutter_den) rational(33434, s.shutter_num, s.shutter_den);
+    if (s.fnumber > 0) rational(33437, (uint32_t)(s.fnumber * 100 + 0.5), 100);
+    if (s.iso > 0 && s.iso <= 65535)
+    {
+        RawTag r{34855, 3, 1, std::vector<uint8_t>(2)};
+        const uint16_t v = (uint16_t)s.iso;
+        memcpy(r.data.data(), &v, 2);
+        t.push_back(r);
+    }
+    if (s.focus_mm >= 327675) rational(37382, 0xFFFFFFFFu, 1);   // the lens's "infinity" reading; EXIF's infinity
+    else if (s.focus_mm > 0) rational(37382, (uint32_t)(s.focus_mm + 0.5), 1000);
+    if (s.focal_mm > 0) rational(37386, (uint32_t)(s.focal_mm * 100 + 0.5), 100);
+    if (!s.lens.empty())
+    {
+        RawTag r{42036, 2, 0, std::vector<uint8_t>(s.lens.begin(), s.lens.end())};
+        r.data.resize(std::max<size_t>(r.data.size() + 1, 4), 0);   // with its null; tinydngwriter can't store a 3-byte value
+        r.count = (uint32_t)r.data.size();
+        t.push_back(r);
+    }
+    return t;
+}
+
+// What a DNG frame carries about time and shooting (zrawdng writes it unless --zraw-parser-exact)
+struct FrameStamp { const ClipTimecode* tc = nullptr; uint32_t frame = 0, fps_num = 0, fps_den = 0; const ClipShot* shot = nullptr; };
 
 // Finds the first video track whose single sample description is 'zraw' with a 'zraw' extension.
 inline bool ParseZrawMov(const std::filesystem::path& path, MovZraw& out, std::string& err)

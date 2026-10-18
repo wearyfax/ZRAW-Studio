@@ -49,7 +49,7 @@ On Linux, you can build the command-line converter yourself and convert on a ser
 2. Check the folder on the right. By default the files go to `zraw-decoded` at the root of the drive the clips are on.
 3. Press **Start**.
 
-Each Bayer clip becomes a folder of DNG files plus a `.mov` with the audio and timecode. Drag the folder into DaVinci Resolve. Every DNG carries the camera's timecode, frame rate and reel name, so the clip keeps its original timecode in Resolve.
+Each Bayer clip becomes a folder of DNG files plus a `.mov` with the audio and timecode. Drag the folder into DaVinci Resolve. Every DNG carries the camera's timecode, frame rate and reel name, so the clip keeps its original timecode in Resolve, and the settings it was shot with: ISO, shutter and, with an electronic lens, the lens name, focal length, f-stop and focus distance.
 
 To see ZRAW thumbnails in File Explorer, open the **Tagger** tab and click **Install thumbnail engine**.
 

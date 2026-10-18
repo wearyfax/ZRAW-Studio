@@ -121,10 +121,12 @@ inline std::vector<uint16_t> DownscaleRawTwice(const std::vector<uint16_t>& img,
 // ForwardMatrix1). `exact`: also use zraw-parser's white level, for byte comparisons (zrawdng
 // --zraw-parser-exact).
 // Timecode, frame rate and reel name (CinemaDNG tags TimeCodes, FrameRate, ReelName), so Resolve gives
-// the sequence the camera's timecode. ReelName is only written when there is one.
+// the sequence the camera's timecode, plus the clip's shooting settings (ShotTags in movparse.hpp).
+// ReelName is only written when there is one.
 inline void SetDngTimeTags(tinydngwriter::DNGImage& img, const FrameStamp& s)
 {
     if (s.fps_num && s.fps_den) { int32_t fr[2] = {(int32_t)s.fps_num, (int32_t)s.fps_den}; img.SetCustomField(51044, tinydngwriter::TIFF_SRATIONAL, 1, fr); }
+    if (s.shot) for (auto& t : ShotTags(*s.shot)) img.SetCustomField(t.tag, t.type, t.count, t.data.data());
     if (!s.tc || !s.tc->ok) return;
     uint8_t code[8];
     TimecodeBytes(*s.tc, s.frame, code);
