@@ -185,10 +185,7 @@ static bool write_lossy(const std::string& path, const ZrawFrame& f, std::vector
 {
     ZrawFrame g = f;
     for (int i = 0; i < halvings(o); ++i)
-    {
         cfa = DownscaleRawTwice(cfa, g.width, g.height);
-        g.width /= 2; g.height /= 2;
-    }
     lossy::Options lo;
     lo.ratio = o.lossy;
     lo.quality_scale = quality_scale;
@@ -391,7 +388,7 @@ static double quality_scale(const fs::path& clip, const ZrawTrack& z, int count,
                     DecodeZrawFrame(fr, cfa.data());
                 }
                 uint32_t W = fr.width, H = fr.height;
-                for (int h = 0; h < halvings(o); ++h) { cfa = DownscaleRawTwice(cfa, W, H); W /= 2; H /= 2; }
+                for (int h = 0; h < halvings(o); ++h) cfa = DownscaleRawTwice(cfa, W, H);
                 lossy::Transform(cfa.data(), (int)W, (int)H, fr.bits(), co);
                 lossy::NoiseWeights(co, nz, lossy::Black12(fr), var_scale, w);
                 s[i] = lossy::ScaleForQuality(co, w, o.quality);

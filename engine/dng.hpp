@@ -98,16 +98,20 @@ inline bool WriteDngWithStandIn(const std::string& path, tinydngwriter::DNGImage
     return ok;
 }
 
-// RAW -> 1/2 RAW, averaging same-color photosites (original: downscale_raw_twice)
-inline std::vector<uint16_t> DownscaleRawTwice(const std::vector<uint16_t>& img, uint32_t w, uint32_t h)
+// RAW -> 1/2 RAW, averaging same-color photosites (original: downscale_raw_twice). Sets w and h to the
+// result's size. Each pass reads 4x4 blocks, so it drops the last rows and columns of a size that is not a
+// multiple of 4: a second pass on 3696x2772 (1848x1386 after the first) gives 924x692.
+inline std::vector<uint16_t> DownscaleRawTwice(const std::vector<uint16_t>& img, uint32_t& w, uint32_t& h)
 {
-    std::vector<uint16_t> r((size_t)w * h / 4);
-    for (uint32_t y = 0; y < h; y += 4)
-        for (uint32_t x = 0; x < w; x += 4)
+    const uint32_t src_w = w, cw = w & ~3u, ch = h & ~3u;
+    w = cw / 2; h = ch / 2;
+    std::vector<uint16_t> r((size_t)w * h);
+    for (uint32_t y = 0; y < ch; y += 4)
+        for (uint32_t x = 0; x < cw; x += 4)
             for (int dy = 0; dy < 2; ++dy)
                 for (int dx = 0; dx < 2; ++dx)
-                    r[(size_t)(y / 2 + dy) * (w / 2) + x / 2 + dx] = (uint16_t)(((uint32_t)img[(size_t)(y + dy) * w + x + dx] + img[(size_t)(y + dy) * w + x + dx + 2] +
-                                                                                img[(size_t)(y + dy + 2) * w + x + dx] + img[(size_t)(y + dy + 2) * w + x + dx + 2]) / 4);
+                    r[(size_t)(y / 2 + dy) * w + x / 2 + dx] = (uint16_t)(((uint32_t)img[(size_t)(y + dy) * src_w + x + dx] + img[(size_t)(y + dy) * src_w + x + dx + 2] +
+                                                                          img[(size_t)(y + dy + 2) * src_w + x + dx] + img[(size_t)(y + dy + 2) * src_w + x + dx + 2]) / 4);
     return r;
 }
 
@@ -180,10 +184,7 @@ inline bool WriteDng(const std::string& path, const ZrawFrame& f, std::vector<ui
 {
     uint32_t w = f.width, h = f.height;
     for (int i = 0; i < (scale == DngScale::Half ? 1 : scale == DngScale::Quarter ? 2 : 0); ++i)
-    {
         cfa = DownscaleRawTwice(cfa, w, h);
-        w /= 2; h /= 2;
-    }
 
     tinydngwriter::DNGImage img;
     SetDngTags(img, f, w, h, storage, color, exact);
