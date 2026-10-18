@@ -542,6 +542,33 @@ public class ConvertPage : UserControl
         return i.Bits > 0 ? L.F("ZRAW Bayer {0}-bit", i.Bits) : "ZRAW Bayer";
     }
 
+    // The hover card for a clip, in the list and on its thumbnail: its path, then how it was shot, from
+    // the clip's metadata (lens values only with an electronic lens; anything not recorded is left out).
+    static string ShotInfo(string path, MovInfo i)
+    {
+        var m = i.Meta;
+        var lines = new List<string>();
+        Func<string, string> get = k => { string v; return m.TryGetValue(k, out v) && v.Trim().Length > 0 ? v.Trim() : null; };
+        Func<string, double> num = v => { double d; return double.TryParse(new string(v.TakeWhile(ch => char.IsDigit(ch) || ch == '.').ToArray()), NumberStyles.Float, CultureInfo.InvariantCulture, out d) ? d : 0; };
+        Action<string, string> add = (label, value) => { if (value != null) lines.Add(L.T(label) + ": " + value); };
+        add("Lens", get("lensType"));
+        string focal = get("lensFocalLength");
+        add("Focal length", focal != null && num(focal) > 0 ? L.F("{0} mm", num(focal)) : null);
+        string f = get("aperture");
+        add("Aperture", f != null ? "f/" + f.TrimStart('F', 'f') : null);
+        string focus = get("focusDistance");
+        if (focus != null && num(focus) > 0) add("Focus distance", num(focus) >= 327675 ? L.T("infinity") : L.F("{0:0.00} m", num(focus) / 1000));
+        add("ISO", get("iso"));
+        add("Shutter", get("shutterSpeed") ?? get("shutterAngle"));
+        string fps = get("projectFps"), shot = get("shootingRate");
+        if (fps != null)
+            add("Frame rate", L.F("{0} fps", fps) + (shot != null && shot != fps ? ", " + L.F("shot at {0} fps", shot) : ""));
+        string kelvin = get("whiteBalanceKelvin"), tint = get("whiteBalanceTint");
+        add("White balance", kelvin != null ? kelvin + (tint != null ? ", " + L.F("tint {0}", tint) : "") : null);
+        add("Camera LUT", get("lut"));
+        return lines.Count > 0 ? path + "\n\n" + string.Join("\n", lines) : path;
+    }
+
     void AddClips(List<string> files, List<MovInfo> infos)
     {
         var known = new HashSet<string>(clips.Select(c => c.Path), StringComparer.OrdinalIgnoreCase);
@@ -556,7 +583,8 @@ public class ConvertPage : UserControl
             string length = info.Fps > 0 ? TimeSpan.FromSeconds(info.Frames / info.Fps).ToString(@"m\:ss") : "";
             c.Row = grid.Rows[grid.Rows.Add(Path.GetFileName(c.Path), Kind(info), info.Frames.ToString(), length, L.T("Ready"), "")];
             if (info.Hevc) hevc++;
-            c.Row.Cells[0].ToolTipText = c.Path;
+            string card = ShotInfo(c.Path, info);   // on every cell, so it shows wherever the row is hovered
+            foreach (DataGridViewCell cell in c.Row.Cells) cell.ToolTipText = card;
             c.Row.Tag = c.T;
             clips.Add(c);
             added++;

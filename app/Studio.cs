@@ -762,6 +762,7 @@ class MovInfo
     public int Frames;
     public double Fps;
     public int Bits;              // bit depth the pixels really use (10 for HEVC; ZrawCore.DataBits for RAW), 0 = unknown
+    public readonly Dictionary<string, string> Meta = new Dictionary<string, string>();   // Z CAM's clip metadata: iso, lensType, ... (prefixes dropped)
     public bool TrueRaw { get { return Codec == "zraw" && ZrawVersion == 0x12EA78D2; } }
     public bool Hevc { get { return Codec == "zraw" && ZrawVersion == 0x45A32DEF; } }
     public bool Convertible { get { return TrueRaw || Hevc && Scheme == 1; } }
@@ -802,6 +803,44 @@ class MovInfo
 
     class Track { public string Codec = ""; public uint Version, Scheme, Timescale, Duration; public int Samples; }
 
+    // moov/meta: QuickTime 'keys' (the names, "com.zcam.camera.iso" and so on) and 'ilst' (items
+    // numbered by key, each with a 'data' box; type 1 is UTF-8 text). Same reading as the engine's ReadClipMeta.
+    static void ReadMeta(byte[] b, int start, int end, MovInfo info)
+    {
+        var names = new List<string>();
+        int ilst = -1, ilstEnd = -1;
+        for (int p = start; p + 8 <= end;)
+        {
+            long size = BE(b, p);
+            if (size < 8 || p + size > end) return;
+            string type = Encoding.ASCII.GetString(b, p + 4, 4);
+            if (type == "keys" && size >= 16)
+                for (int q = p + 16, n = (int)BE(b, p + 12); n-- > 0 && q + 8 <= p + size;)
+                {
+                    int ks = (int)BE(b, q);
+                    if (ks < 8 || q + ks > p + size) break;
+                    string k = Encoding.UTF8.GetString(b, q + 8, ks - 8);
+                    foreach (var pre in new[] { "com.zcam.camera.", "com.apple.proapps." }) if (k.StartsWith(pre)) k = k.Substring(pre.Length);
+                    names.Add(k);
+                    q += ks;
+                }
+            else if (type == "ilst") { ilst = p + 8; ilstEnd = (int)(p + size); }
+            p += (int)size;
+        }
+        for (int p = ilst; ilst >= 0 && p + 8 <= ilstEnd;)
+        {
+            int size = (int)BE(b, p), index = (int)BE(b, p + 4);
+            if (size < 8 || p + size > ilstEnd) return;
+            int d = p + 8;   // the item's 'data' box: size, 'data', type, locale, value
+            if (d + 16 <= p + size && Encoding.ASCII.GetString(b, d + 4, 4) == "data" && BE(b, d + 8) == 1 && index >= 1 && index <= names.Count)
+            {
+                int ds = Math.Min((int)BE(b, d), p + size - d);
+                if (ds >= 16) info.Meta[names[index - 1]] = Encoding.UTF8.GetString(b, d + 16, ds - 16);
+            }
+            p += size;
+        }
+    }
+
     static void Walk(byte[] b, int start, int end, MovInfo info, Track t)
     {
         for (int p = start; p + 8 <= end;)
@@ -821,6 +860,7 @@ class MovInfo
                 }
             }
             else if (type == "mdia" || type == "minf" || type == "stbl") Walk(b, body, stop, info, t);
+            else if (type == "meta") ReadMeta(b, body, stop, info);
             else if (type == "mdhd" && size >= 32) t.Timescale = b[body] == 1 ? BE(b, body + 20) : BE(b, body + 12);
             else if (type == "stts" && size >= 24 && BE(b, body + 4) > 0) t.Duration = BE(b, body + 12);   // first entry's sample duration
             else if (type == "stsz" && size >= 20) t.Samples = (int)BE(b, body + 8);

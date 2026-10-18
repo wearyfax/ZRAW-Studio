@@ -52,6 +52,7 @@ public class ThumbView : ScrollableControl
     public Action Remove;         // Delete key
     int anchor = -1, hover = -1;
     bool showing;
+    readonly ToolTip tip = new ToolTip { AutoPopDelay = 30000, InitialDelay = 600, ReshowDelay = 300 };   // the row's hover card (its first cell's tooltip)
 
     public ThumbView(DataGridView grid, int statusCol, params int[] rightCols)
     {
@@ -241,10 +242,16 @@ public class ThumbView : ScrollableControl
     {
         base.OnMouseMove(e);
         int i = Hit(e.Location);
-        if (i != hover) { hover = i; Invalidate(); }
+        if (i != hover)
+        {
+            hover = i;
+            Invalidate();
+            tip.Hide(this);
+            tip.SetToolTip(this, i >= 0 ? grid.Rows[i].Cells[0].ToolTipText ?? "" : "");
+        }
     }
 
-    protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = -1; Invalidate(); }
+    protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = -1; Invalidate(); tip.SetToolTip(this, ""); }
 
     protected override void OnKeyDown(KeyEventArgs e) { base.OnKeyDown(e); Key(e); }
 
