@@ -26,6 +26,7 @@
 //
 //   The Linux build (build.sh) runs on the CPU only and has no play, gpuinfo, --gpus, --denoise or
 //   --delete-originals.
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -34,6 +35,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -492,6 +494,29 @@ static bool convert_clip(const fs::path& clip, const Options& o)
         char num[16];
         snprintf(num, sizeof num, "_%06d.dng", i);
         dngs[i] = o.exact ? dir / ("track_" + std::to_string(z.track_index) + "_" + std::to_string(i) + ".dng") : dir / (dir.filename().string() + num);
+    }
+    // Converting over an earlier conversion: its frames that this run won't rewrite are removed, or Resolve
+    // would read them as part of the sequence (the old track_<t>_<frame>.dng names next to the new ones,
+    // or more frames than this run writes). Only files named the way zrawdng names frames are touched.
+    if (!o.no_write)
+    {
+        std::set<std::string> mine;
+        for (auto& p : dngs) mine.insert(p.filename().string());
+        auto ours = [&](const std::string& f) {
+            auto digits = [&](size_t a, size_t b) { return b > a && std::all_of(f.begin() + a, f.begin() + b, [](char c) { return c >= '0' && c <= '9'; }); };
+            if (f.size() < 5 || f.compare(f.size() - 4, 4, ".dng")) return false;
+            const size_t end = f.size() - 4;
+            if (!f.compare(0, 6, "track_")) { size_t u = f.find('_', 6); return u != std::string::npos && digits(6, u) && digits(u + 1, end); }
+            return f.size() == name.size() + 11 && !f.compare(0, name.size() + 1, name + "_") && digits(name.size() + 1, end);
+        };
+        int removed = 0;
+        for (auto& e : fs::directory_iterator(dir, ec))
+        {
+            const std::string f = e.path().filename().string();
+            std::error_code rec;
+            if (e.is_regular_file(rec) && ours(f) && !mine.count(f) && fs::remove(e.path(), rec)) ++removed;
+        }
+        if (removed && !o.progress) fprintf(stderr, "removed %d frame%s of an earlier conversion\n", removed, removed == 1 ? "" : "s");
     }
     std::vector<uint64_t> written(count, 0);
     const uint64_t clip_size = fs::file_size(clip, ec);
