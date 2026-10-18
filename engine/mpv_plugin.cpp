@@ -103,7 +103,10 @@ namespace
         mpv_command(g_mpv, v.data());
     }
 
+    // The stream callbacks and on_load are function-try-blocks: an exception escaping into mpv's C code would
+    // call std::terminate and take the player down, so a damaged file fails to load instead
     int open_stream(void*, char* uri, mpv_stream_cb_info* info)
+    try
     {
         std::string path = uri + 7;   // after "zraw://"
         std::shared_ptr<PreviewSource> src;
@@ -123,8 +126,10 @@ namespace
         FillPreviewStream(src, info);
         return 0;
     }
+    catch (...) { return MPV_ERROR_LOADING_FAILED; }
 
     int open_hevc_stream(void*, char* uri, mpv_stream_cb_info* info)
+    try
     {
         std::string path = uri + 11;   // after "zrawhevc://"
         std::shared_ptr<HevcZraw> z;
@@ -141,9 +146,11 @@ namespace
         FillHevcStream(z, info);
         return 0;
     }
+    catch (...) { return MPV_ERROR_LOADING_FAILED; }
 
     // on_load: decide whether this file is ours
     void on_load()
+    try
     {
         std::string path = get_string("path");
         std::filesystem::path p = std::filesystem::u8path(path);
@@ -212,6 +219,8 @@ namespace
                            ", " + std::to_string(server.DefectCount()) + " defective photosites repaired";
         command({"print-text", note.c_str()});
     }
+    catch (const std::exception& e) { command({"print-text", (std::string("zraw: ") + e.what()).c_str()}); }
+    catch (...) { command({"print-text", "zraw: internal error"}); }
 
     void on_message(mpv_event_client_message* msg)
     {
