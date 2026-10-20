@@ -129,6 +129,19 @@ bin/zrawdng convert /path/to/DCIM -o /path/to/output
 
 Run `bin/zrawdng` without arguments to see the options. Lossless output from Linux and Windows is identical, byte for byte.
 
+### Intel Mac
+
+The converter also builds on Intel Macs from 2013 or later running macOS 10.15 or newer. As on Linux, it runs on the CPU only; GPU acceleration, denoise, playback and thumbnails need Windows. You need Apple's command line tools, which `xcode-select --install` installs.
+
+```sh
+git clone https://github.com/wearyfax/ZRAW-Studio.git
+cd ZRAW-Studio
+sh build-mac.sh
+bin/zrawdng convert /Volumes/CARD/DCIM -o ~/Movies/zraw-decoded
+```
+
+Run `bin/zrawdng` without arguments to see the options. This build is for Intel processors; Macs with Apple silicon (M1 and later) aren't supported yet.
+
 ### Source folders
 
 | Folder | Contents |

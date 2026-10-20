@@ -31,7 +31,11 @@ public:
     ~PosixFile() { if (fd_ >= 0) ::close(fd_); }
     bool ok() const { return fd_ >= 0; }
     uint64_t size() const { struct stat st; return fd_ >= 0 && fstat(fd_, &st) == 0 ? (uint64_t)st.st_size : 0; }
+#ifdef __APPLE__
+    void sequential() const { if (fd_ >= 0) fcntl(fd_, F_RDAHEAD, 1); }   // macOS has no posix_fadvise
+#else
     void sequential() const { if (fd_ >= 0) posix_fadvise(fd_, 0, 0, POSIX_FADV_SEQUENTIAL); }   // more read-ahead
+#endif
     // Exactly n bytes at `offset`, or false
     bool read_at(uint64_t offset, void* buf, size_t n) const
     {
