@@ -551,6 +551,8 @@ public class ConvertPage : UserControl
         Func<string, string> get = k => { string v; return m.TryGetValue(k, out v) && v.Trim().Length > 0 ? v.Trim() : null; };
         Func<string, double> num = v => { double d; return double.TryParse(new string(v.TakeWhile(ch => char.IsDigit(ch) || ch == '.').ToArray()), NumberStyles.Float, CultureInfo.InvariantCulture, out d) ? d : 0; };
         Action<string, string> add = (label, value) => { if (value != null) lines.Add(L.T(label) + ": " + value); };
+        string maker = get("CameraMaker"), model = get("CameraModel");   // "Z CAM" and "E2", "E2-F6", "E2-S6G"
+        add("Camera", model != null ? (maker != null ? maker + " " : "") + model : null);
         add("Lens", get("lensType"));
         string focal = get("lensFocalLength");
         add("Focal length", focal != null && num(focal) > 0 ? L.F("{0} mm", num(focal)) : null);
@@ -560,6 +562,9 @@ public class ConvertPage : UserControl
         if (focus != null && num(focus) > 0) add("Focus distance", num(focus) >= 327675 ? L.T("infinity") : L.F("{0:0.00} m", num(focus) / 1000));
         add("ISO", get("iso"));
         add("Shutter", get("shutterSpeed") ?? get("shutterAngle"));
+        string nd = get("nd");   // "clear" on the F6 and S6G; the E2 doesn't record it
+        add("ND", nd != null ? char.ToUpper(nd[0]) + nd.Substring(1) : null);
+        add("EV", get("ev"));     // exposure compensation, F6 and S6G
         string fps = get("projectFps"), shot = get("shootingRate");
         if (fps != null)
             add("Frame rate", L.F("{0} fps", fps) + (shot != null && shot != fps ? ", " + L.F("shot at {0} fps", shot) : ""));

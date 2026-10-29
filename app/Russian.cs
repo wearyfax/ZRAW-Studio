@@ -149,6 +149,7 @@ static partial class L
         { "Ready", "Готов к запуску" },
         { "ZRAW H.265 10-bit", "ZRAW H.265 10 бит" },
         { "ZRAW Bayer {0}-bit", "ZRAW Bayer {0} бит" },
+        { "Camera", "Камера" },
         { "Lens", "Объектив" },
         { "Focal length", "Фокусное расстояние" },
         { "{0} mm", "{0} мм" },
